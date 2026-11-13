@@ -139,6 +139,11 @@ private final class AirBattleScene: SKScene {
     private var hitCombo = 0
     private var comboDeadline: CGFloat = 0
     private let threat = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let telemetryPanel = SKShapeNode()
+    private let telemetryLines = (0..<7).map { _ in SKLabelNode(fontNamed: "Menlo-Bold") }
+    private let radarPanel = SKShapeNode()
+    private let radarContacts = SKNode()
+    private var gunCycle = 0
 
     init(size: CGSize, fighter: Fighter) {
         self.fighter = fighter
@@ -171,6 +176,7 @@ private final class AirBattleScene: SKScene {
         threat.horizontalAlignmentMode = .right
         threat.zPosition = 101
         addChild(threat)
+        installTelemetry()
         updateLabels()
         view.window?.makeFirstResponder(self)
     }
@@ -178,6 +184,7 @@ private final class AirBattleScene: SKScene {
         hud.position = CGPoint(x: 24, y: size.height - 22)
         status.position = CGPoint(x: size.width / 2, y: size.height / 2 + 80)
         threat.position = CGPoint(x: size.width - 25, y: size.height - 50)
+        layoutTelemetry()
         if player.position == .zero { player.position = CGPoint(x: size.width / 2, y: size.height / 2) }
     }
     override func keyDown(with event: NSEvent) {
@@ -611,8 +618,8 @@ private final class AirBattleScene: SKScene {
                 if node.position.y > size.height + 330 { node.position.y -= size.height + 640 }
             }
         }
-        if keys.contains(49) && gameTime - lastFire > 0.11 {
-            fire(from: player.position, angle: heading, hostile: false)
+        if keys.contains(49) && gameTime - lastFire > 0.115 {
+            firePlayerWeapons()
             lastFire = gameTime
         }
         if gameTime - lastFormation > max(8, 13.5 - CGFloat(wave) * 0.35) && bandits.count < 15 {
@@ -766,13 +773,35 @@ private final class AirBattleScene: SKScene {
         threat.text = rearThreat ? "⚠ SIX O'CLOCK — BANDIT BEHIND" : ""
     }
 
-    private func fire(from origin: CGPoint, angle: CGFloat, hostile: Bool) {
+    private func firePlayerWeapons() {
+        // Wing-mounted .50-caliber guns on P-51, P-47 and P-40;
+        // P-38 concentrates its cannon and machine guns in the nose.
+        gunCycle += 1
+        let barrelX: CGFloat
+        switch fighter {
+        case .mustang: barrelX = [18, 25, 31][gunCycle % 3]
+        case .thunderbolt: barrelX = [19, 24, 29, 34][gunCycle % 4]
+        case .warhawk: barrelX = [17, 24, 30][gunCycle % 3]
+        case .lightning: barrelX = 4
+        }
+        if fighter == .lightning {
+            fire(from: player.position, angle: heading, hostile: false, lateral: 0, forward: 3)
+            fire(from: player.position, angle: heading, hostile: false, lateral: gunCycle % 2 == 0 ? -4 : 4, forward: -1)
+        } else {
+            fire(from: player.position, angle: heading, hostile: false, lateral: -barrelX, forward: -26)
+            fire(from: player.position, angle: heading, hostile: false, lateral: barrelX, forward: -26)
+        }
+    }
+
+    private func fire(from origin: CGPoint, angle: CGFloat, hostile: Bool,
+                      lateral: CGFloat = 0, forward: CGFloat = 0) {
         let round = SKShapeNode(rectOf: CGSize(width: 4, height: hostile ? 13 : 20), cornerRadius: 2)
         round.fillColor = hostile ? .orange : .yellow
         round.strokeColor = .clear
         round.glowWidth = 3
         round.zRotation = angle - .pi / 2
-        round.position = CGPoint(x: origin.x + cos(angle) * 42, y: origin.y + sin(angle) * 42)
+        round.position = CGPoint(x: origin.x + cos(angle) * (42 + forward) - sin(angle) * lateral,
+                                 y: origin.y + sin(angle) * (42 + forward) + cos(angle) * lateral)
         round.zPosition = 22
         addChild(round)
         let speed: CGFloat = hostile ? 420 : 790
@@ -856,11 +885,103 @@ private final class AirBattleScene: SKScene {
             if self?.gameOver == false && self?.pausedGame == false { self?.status.text = "" }
         }]))
     }
+    private func installTelemetry() {
+        hud.fontSize = 12
+        hud.fontColor = .white.withAlphaComponent(0.82)
+        telemetryPanel.fillColor = .black.withAlphaComponent(0.31)
+        telemetryPanel.strokeColor = .cyan.withAlphaComponent(0.32)
+        telemetryPanel.lineWidth = 1
+        telemetryPanel.zPosition = 90
+        addChild(telemetryPanel)
+        for (i, label) in telemetryLines.enumerated() {
+            label.fontSize = i == 0 ? 13 : 11
+            label.fontColor = i == 0 ? .cyan : .white.withAlphaComponent(0.95)
+            label.horizontalAlignmentMode = .left
+            label.verticalAlignmentMode = .center
+            label.zPosition = 92
+            addChild(label)
+        }
+        radarPanel.fillColor = .black.withAlphaComponent(0.33)
+        radarPanel.strokeColor = .cyan.withAlphaComponent(0.4)
+        radarPanel.lineWidth = 1
+        radarPanel.zPosition = 91
+        addChild(radarPanel)
+        radarContacts.zPosition = 93
+        addChild(radarContacts)
+        layoutTelemetry()
+    }
+    private func layoutTelemetry() {
+        let right = size.width - 18
+        let panelWidth: CGFloat = 238
+        let panelHeight: CGFloat = 191
+        let top = size.height - 65
+        let panel = CGRect(x: right - panelWidth, y: top - panelHeight,
+                           width: panelWidth, height: panelHeight)
+        telemetryPanel.path = CGPath(roundedRect: panel, cornerWidth: 10, cornerHeight: 10, transform: nil)
+        for (i, label) in telemetryLines.enumerated() {
+            label.position = CGPoint(x: panel.minX + 13, y: panel.maxY - 18 - CGFloat(i) * 25)
+        }
+        let radarFrame = CGRect(x: right - panelWidth, y: 19, width: panelWidth, height: 222)
+        radarPanel.path = CGPath(roundedRect: radarFrame, cornerWidth: 10, cornerHeight: 10, transform: nil)
+        radarContacts.position = CGPoint(x: radarFrame.midX, y: radarFrame.midY - 5)
+    }
+    private func updateRadar() {
+        radarContacts.removeAllChildren()
+        let radius: CGFloat = 89
+        for fraction in [CGFloat(0.33), 0.66, 1] {
+            let ring = SKShapeNode(circleOfRadius: radius * fraction)
+            ring.strokeColor = .cyan.withAlphaComponent(0.17)
+            ring.fillColor = .clear
+            ring.lineWidth = 1
+            radarContacts.addChild(ring)
+        }
+        let north = SKShapeNode(rectOf: CGSize(width: 1, height: radius * 2))
+        north.fillColor = .cyan.withAlphaComponent(0.17)
+        north.strokeColor = .clear
+        radarContacts.addChild(north)
+        let east = SKShapeNode(rectOf: CGSize(width: radius * 2, height: 1))
+        east.fillColor = .cyan.withAlphaComponent(0.17)
+        east.strokeColor = .clear
+        radarContacts.addChild(east)
+        let center = SKShapeNode(circleOfRadius: 4)
+        center.fillColor = .cyan
+        center.strokeColor = .clear
+        radarContacts.addChild(center)
+        for bandit in bandits {
+            let dx = bandit.position.x - player.position.x
+            let dy = bandit.position.y - player.position.y
+            // Player-forward is always up on the radar.
+            let lateral = -sin(heading) * dx + cos(heading) * dy
+            let ahead = cos(heading) * dx + sin(heading) * dy
+            let px = lateral * 0.16
+            let py = ahead * 0.16
+            let distance = hypot(px, py)
+            if distance > radius { continue }
+            let blip = SKShapeNode(circleOfRadius: bandit.kind == 2 ? 4.2 : 3.3)
+            blip.position = CGPoint(x: px, y: py)
+            blip.fillColor = .orange
+            blip.strokeColor = .red
+            blip.glowWidth = 1.5
+            radarContacts.addChild(blip)
+        }
+    }
+
     private func updateLabels() {
         hud.position = CGPoint(x: 23, y: size.height - 24)
         status.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
         threat.position = CGPoint(x: size.width - 24, y: size.height - 51)
-        hud.text = "VECTOR ACES  |  \(fighter.rawValue.uppercased())  |  WAVE \(wave)  |  KILLS \(kills)  |  SCORE \(score)  |  AIRFRAME \(max(0, health))/\(fighter.health)  |  SPEED \(Int(airspeed))"
+        hud.text = "VECTOR ACES  /  WWII AIR COMBAT"
+        let rows = [
+            "FLIGHT TELEMETRY",
+            fighter.rawValue.uppercased(),
+            String(format: "AIRSPEED  %03d MPH", Int(airspeed)),
+            String(format: "HEADING   %03d DEG", Int((90 - heading * 180 / .pi).truncatingRemainder(dividingBy: 360) + 360) % 360),
+            "AIRFRAME  \(max(0, health))/\(fighter.health)",
+            "WAVE \(wave)   KILLS \(kills)",
+            "SCORE  \(score)"
+        ]
+        for (index, label) in telemetryLines.enumerated() { label.text = rows[index] }
+        updateRadar()
     }
     private func restart() {
         for b in bandits { b.sprite.removeFromParent() }
@@ -875,6 +996,7 @@ private final class AirBattleScene: SKScene {
         threat.text = ""
         lastFire = -1
         health = fighter.health
+        gunCycle = 0
         score = 0
         kills = 0
         wave = 1
