@@ -35,3 +35,9 @@ This is unverified source until compiled and play-tested locally on macOS. Histo
 - Aircraft have additional panel lines, engines, exhaust details, wing control markings, and relative size differences between fighters and dive bombers.
 - No third-party map service or asset usage authorization is implied by this work.
 - macOS compilation and frame-rate verification still require local testing in Xcode.
+
+## Continuous ground terrain (latest development pass)
+
+The earlier four repeated terrain textures have been replaced by a 3×3 streamed tile neighborhood. Tile keys are absolute world coordinates, so each tile uses unique world-sampled multiscale noise, field parcel colors, forests, roads, riverbeds, gravel verges, rural buildings and microtextures. Tiles are recreated deterministically when revisited, and tiles far outside the camera are discarded to control memory. The game continues to run without internet. This is generated aerial-style terrain **not actual satellite photographs**. Clouds, aircraft and controls were not intentionally changed in this pass.
+
+**Testing note:** Texture creation is currently CPU-heavy and synchronous. Test macOS launch and sustained traversal for loading stutter and seams. True photographic imagery still requires separately cleared imagery data. The world coordinate fields are deterministic but do not correspond to a real geographic location.
