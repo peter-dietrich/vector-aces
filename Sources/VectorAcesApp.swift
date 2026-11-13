@@ -1217,7 +1217,6 @@ private final class AirBattleScene: SKScene {
             beginPlayerCrash()
         } else {
             player.run(.sequence([.fadeAlpha(to: 0.25, duration: 0.1), .fadeAlpha(to: 1, duration: 0.25)]))
-        } else {
             flash("HIT! AIRFRAME DAMAGED")
         }
     }
