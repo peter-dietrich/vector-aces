@@ -85,6 +85,7 @@ private struct GameSurface: NSViewRepresentable {
 
 
 private final class AirBattleScene: SKScene {
+    private enum Tactic { case formation, intercept, attack, breakAway, regroup }
     private struct Bandit {
         let sprite: SKNode
         var position: CGPoint
@@ -95,6 +96,11 @@ private final class AirBattleScene: SKScene {
         var formationTime: CGFloat
         var fireCooldown: CGFloat
         var targetOffset: CGFloat
+        var tactic: Tactic
+        var tacticTime: CGFloat
+        var maneuverSign: CGFloat
+        var entryHeading: CGFloat
+        var previousDistance: CGFloat
     }
     private struct Round {
         let sprite: SKShapeNode
@@ -125,7 +131,10 @@ private final class AirBattleScene: SKScene {
     private var invulnerableUntil: CGFloat = 0
     private let hud = SKLabelNode(fontNamed: "Menlo-Bold")
     private let status = SKLabelNode(fontNamed: "Menlo-Bold")
-    private var rng = SystemRandomNumberGenerator()
+    private var lastWarning: CGFloat = -10
+    private var hitCombo = 0
+    private var comboDeadline: CGFloat = 0
+    private let threat = SKLabelNode(fontNamed: "Menlo-Bold")
 
     init(size: CGSize, fighter: Fighter) {
         self.fighter = fighter
@@ -153,12 +162,18 @@ private final class AirBattleScene: SKScene {
         status.fontSize = 29
         status.zPosition = 100
         addChild(status)
+        threat.fontSize = 14
+        threat.fontColor = .orange
+        threat.horizontalAlignmentMode = .right
+        threat.zPosition = 101
+        addChild(threat)
         updateLabels()
         view.window?.makeFirstResponder(self)
     }
     override func didChangeSize(_ oldSize: CGSize) {
         hud.position = CGPoint(x: 24, y: size.height - 22)
         status.position = CGPoint(x: size.width / 2, y: size.height / 2 + 80)
+        threat.position = CGPoint(x: size.width - 25, y: size.height - 50)
         player.position = CGPoint(x: size.width / 2, y: size.height / 2)
     }
     override func keyDown(with event: NSEvent) {
@@ -176,57 +191,95 @@ private final class AirBattleScene: SKScene {
     }
 
     private func drawAircraft(kind: Int, color: SKColor) -> SKNode {
-        // The fuselage points up; heading controls world orientation.
+        // Original top-down silhouettes: -1 = selected US fighter, 0 = Fw 190,
+        // 1 = Bf 109, 2 = Ju 87 Stuka with identifiable gull wings.
         let node = SKNode()
-        let wings: CGFloat = kind == 2 ? 37 : (kind == -1 && fighter == .lightning ? 41 : 32)
-        let fuselage = SKShapeNode()
-        let outline = CGMutablePath()
-        outline.move(to: CGPoint(x: -5, y: -35))
-        outline.addLine(to: CGPoint(x: -8, y: -18))
-        outline.addLine(to: CGPoint(x: -wings, y: -6))
-        outline.addLine(to: CGPoint(x: -wings, y: 1))
-        outline.addLine(to: CGPoint(x: -7, y: 9))
-        outline.addLine(to: CGPoint(x: -6, y: 31))
-        outline.addLine(to: CGPoint(x: 0, y: 40))
-        outline.addLine(to: CGPoint(x: 6, y: 31))
-        outline.addLine(to: CGPoint(x: 7, y: 9))
-        outline.addLine(to: CGPoint(x: wings, y: 1))
-        outline.addLine(to: CGPoint(x: wings, y: -6))
-        outline.addLine(to: CGPoint(x: 8, y: -18))
-        outline.addLine(to: CGPoint(x: 5, y: -35))
-        outline.closeSubpath()
-        fuselage.path = outline
+        let isStuka = kind == 2
+        let isLightning = kind == -1 && fighter == .lightning
+        let isThunderbolt = kind == -1 && fighter == .thunderbolt
+        let span: CGFloat = isLightning ? 48 : isStuka ? 45 : isThunderbolt ? 39 : 35
+        let body = CGMutablePath()
+        body.move(to: CGPoint(x: -4.5, y: -42))
+        body.addLine(to: CGPoint(x: -6, y: -24))
+        body.addLine(to: CGPoint(x: -span * 0.8, y: -9))
+        if isStuka {
+            body.addLine(to: CGPoint(x: -span, y: -16))
+            body.addLine(to: CGPoint(x: -span, y: -6))
+            body.addLine(to: CGPoint(x: -12, y: 10))
+        } else {
+            body.addLine(to: CGPoint(x: -span, y: 0))
+            body.addLine(to: CGPoint(x: -span * 0.91, y: 6))
+            body.addLine(to: CGPoint(x: -9, y: 12))
+        }
+        body.addLine(to: CGPoint(x: -5.8, y: 34))
+        body.addLine(to: CGPoint(x: -2, y: 45))
+        body.addLine(to: CGPoint(x: 2, y: 45))
+        body.addLine(to: CGPoint(x: 5.8, y: 34))
+        body.addLine(to: CGPoint(x: 9, y: 12))
+        if isStuka {
+            body.addLine(to: CGPoint(x: span, y: -6))
+            body.addLine(to: CGPoint(x: span, y: -16))
+            body.addLine(to: CGPoint(x: span * 0.8, y: -9))
+        } else {
+            body.addLine(to: CGPoint(x: span * 0.91, y: 6))
+            body.addLine(to: CGPoint(x: span, y: 0))
+            body.addLine(to: CGPoint(x: span * 0.8, y: -9))
+        }
+        body.addLine(to: CGPoint(x: 6, y: -24))
+        body.addLine(to: CGPoint(x: 4.5, y: -42))
+        body.closeSubpath()
+        let fuselage = SKShapeNode(path: body)
         fuselage.fillColor = color
-        fuselage.strokeColor = color.withAlphaComponent(0.9)
-        fuselage.lineWidth = 1.7
+        fuselage.strokeColor = SKColor(white: 0.9, alpha: 0.85)
+        fuselage.lineWidth = 1.1
         node.addChild(fuselage)
-        let tail = SKShapeNode(rectOf: CGSize(width: 29, height: 5), cornerRadius: 1)
-        tail.position.y = -27
-        tail.fillColor = color.withAlphaComponent(0.88)
-        tail.strokeColor = .black.withAlphaComponent(0.4)
+        let wingPanel = SKShapeNode(rectOf: CGSize(width: span * 1.5, height: 2))
+        wingPanel.position.y = 0
+        wingPanel.fillColor = .black.withAlphaComponent(0.26)
+        wingPanel.strokeColor = .clear
+        node.addChild(wingPanel)
+        let tail = SKShapeNode(rectOf: CGSize(width: isLightning ? 49 : 28, height: 5), cornerRadius: 1)
+        tail.position.y = -29
+        tail.fillColor = color.withAlphaComponent(0.94)
+        tail.strokeColor = .black.withAlphaComponent(0.48)
         node.addChild(tail)
-        let canopy = SKShapeNode(ellipseOf: CGSize(width: 10, height: 17))
-        canopy.position.y = 8
-        canopy.fillColor = SKColor(red: 0.13, green: 0.29, blue: 0.42, alpha: 1)
-        canopy.strokeColor = .white.withAlphaComponent(0.75)
+        let canopy = SKShapeNode(ellipseOf: CGSize(width: 11, height: isStuka ? 28 : 19))
+        canopy.position.y = isStuka ? 7 : 11
+        canopy.fillColor = SKColor(red: 0.10, green: 0.25, blue: 0.34, alpha: 1)
+        canopy.strokeColor = .white.withAlphaComponent(0.7)
         node.addChild(canopy)
         for side in [-1.0, 1.0] {
-            let marking = SKShapeNode(circleOfRadius: 5.5)
-            marking.position = CGPoint(x: CGFloat(side) * (wings * 0.59), y: -2)
-            marking.fillColor = kind == -1 ? .white : .black.withAlphaComponent(0.65)
-            marking.strokeColor = kind == -1 ? .blue : .gray
-            marking.lineWidth = 2
+            let sign = CGFloat(side)
+            let marking = SKShapeNode(circleOfRadius: kind == -1 ? 6.5 : 5.2)
+            marking.position = CGPoint(x: sign * span * 0.66, y: -1)
+            marking.fillColor = kind == -1 ? .white : .black.withAlphaComponent(0.83)
+            marking.strokeColor = kind == -1 ? .blue : .white.withAlphaComponent(0.75)
+            marking.lineWidth = 1.8
             node.addChild(marking)
-        }
-        if kind == -1 && fighter == .lightning {
-            for side in [-1.0, 1.0] {
-                let boom = SKShapeNode(rectOf: CGSize(width: 5, height: 49), cornerRadius: 1)
-                boom.position = CGPoint(x: CGFloat(side) * 18, y: -3)
+            if isLightning {
+                let boom = SKShapeNode(rectOf: CGSize(width: 6, height: 63), cornerRadius: 2)
+                boom.position = CGPoint(x: sign * 22, y: -2)
                 boom.fillColor = color
-                boom.strokeColor = .black.withAlphaComponent(0.4)
+                boom.strokeColor = .black.withAlphaComponent(0.45)
                 node.addChild(boom)
             }
+            if kind == 0 {
+                let cannon = SKShapeNode(rectOf: CGSize(width: 2.4, height: 14))
+                cannon.position = CGPoint(x: sign * 20, y: 13)
+                cannon.fillColor = .darkGray
+                cannon.strokeColor = .clear
+                node.addChild(cannon)
+            }
         }
+        // Animated propeller disc rather than a stationary vertical bar.
+        let prop = SKShapeNode(ellipseOf: CGSize(width: isLightning ? 16 : 24, height: 5))
+        prop.fillColor = .white.withAlphaComponent(0.28)
+        prop.strokeColor = .white.withAlphaComponent(0.22)
+        prop.position.y = 43
+        prop.name = "prop"
+        prop.run(.repeatForever(.sequence([.scaleX(to: 0.35, duration: 0.07),
+                                            .scaleX(to: 1.1, duration: 0.07)])))
+        node.addChild(prop)
         return node
     }
 
@@ -297,17 +350,18 @@ private final class AirBattleScene: SKScene {
             fire(from: player.position, angle: heading, hostile: false)
             lastFire = gameTime
         }
-        if gameTime - lastFormation > max(7, 14 - CGFloat(wave) * 0.6) {
+        if gameTime - lastFormation > max(8, 13.5 - CGFloat(wave) * 0.35) && bandits.count < 15 {
             spawnFormation()
             lastFormation = gameTime
         }
         updateBandits(dt: dt, scrolling: scroll)
         updateRounds(dt: dt, scrolling: scroll)
+        // Give a reliable threat direction for attacks approaching outside the view.
         updateLabels()
     }
 
     private func spawnFormation() {
-        let count = min(3 + wave / 2, 7)
+        let count = min(3 + wave / 2, 6)
         let edge = Int.random(in: 0..<4)
         let center: CGPoint
         switch edge {
@@ -318,13 +372,16 @@ private final class AirBattleScene: SKScene {
         }
         let toward = atan2(player.position.y - center.y, player.position.x - center.x)
         let kind = Int.random(in: 0...(wave >= 3 ? 2 : 1))
+        let style = Int.random(in: 0...2) // V, echelon, or paired flights
         for i in 0..<count {
             let index = CGFloat(i)
             let row = CGFloat((i + 1) / 2)
             let sign: CGFloat = i % 2 == 0 ? -1 : 1
+            let leadLag = style == 0 ? row * 66 : style == 1 ? index * 47 : CGFloat(i / 2) * 88
+            let sideOffset = style == 0 ? sign * row * 65 : style == 1 ? index * 22 : sign * 44
             let location = CGPoint(
-                x: center.x - cos(toward) * row * 64 + cos(toward + .pi / 2) * sign * row * 63,
-                y: center.y - sin(toward) * row * 64 + sin(toward + .pi / 2) * sign * row * 63
+                x: center.x - cos(toward) * leadLag + cos(toward + .pi / 2) * sideOffset,
+                y: center.y - sin(toward) * leadLag + sin(toward + .pi / 2) * sideOffset
             )
             let sprite = SKNode()
             sprite.position = location
@@ -335,45 +392,114 @@ private final class AirBattleScene: SKScene {
             addChild(sprite)
             bandits.append(Bandit(sprite: sprite, position: location, heading: toward, speed: kind == 2 ? 150 : CGFloat.random(in: 180...240),
                                   health: kind == 2 ? 5 : (wave >= 3 ? 3 : 2), kind: kind, formationTime: CGFloat.random(in: 1.7...3.7) + row * 0.25,
-                                  fireCooldown: index * 0.18 + 1.5, targetOffset: CGFloat.random(in: -1.15...1.15)))
+                                  fireCooldown: index * 0.18 + 1.3, targetOffset: CGFloat.random(in: -1.15...1.15),
+                                  tactic: .formation, tacticTime: 0, maneuverSign: sign,
+                                  entryHeading: toward, previousDistance: 1000))
         }
         flash("INCOMING FORMATION — \(count) HOSTILES")
     }
     private func updateBandits(dt: CGFloat, scrolling: CGVector) {
+        // Four-state combat behavior: line up, attack, break away, and re-engage.
+        // Changing tactics prevents the old permanent "fly toward the player" behavior.
         for i in bandits.indices {
             var b = bandits[i]
             b.formationTime -= dt
+            b.tacticTime -= dt
             b.fireCooldown -= dt
-            let distance = hypot(player.position.x - b.position.x, player.position.y - b.position.y)
-            let targetHeading = atan2(player.position.y - b.position.y, player.position.x - b.position.x)
-            if b.formationTime <= 0 {
-                // German fighters choose offsets and alternate between pursuit and break-away turns.
-                let desired = targetHeading + (b.kind == 2 ? 0.65 : b.targetOffset * min(0.65, distance / 400))
-                let delta = atan2(sin(desired - b.heading), cos(desired - b.heading))
-                let maxTurn: CGFloat = (b.kind == 2 ? 1.05 : b.kind == 1 ? 2.15 : 1.65) * dt
-                b.heading += max(-maxTurn, min(maxTurn, delta))
+            let dx = player.position.x - b.position.x
+            let dy = player.position.y - b.position.y
+            let distance = hypot(dx, dy)
+            let bearing = atan2(dy, dx)
+            let playerForward = CGVector(dx: cos(heading), dy: sin(heading))
+            let inRear = (b.position.x - player.position.x) * playerForward.dx +
+                         (b.position.y - player.position.y) * playerForward.dy < -45
+
+            if b.tactic == .formation && b.formationTime <= 0 {
+                b.tactic = .intercept
+                b.tacticTime = CGFloat.random(in: 0.7...1.6)
             }
+            if b.tactic == .intercept && (distance < 330 || b.tacticTime <= 0) {
+                b.tactic = .attack
+                b.tacticTime = CGFloat.random(in: 2...3.4)
+            }
+            if b.tactic == .attack && (distance < 100 || b.tacticTime <= 0) {
+                b.tactic = .breakAway
+                b.tacticTime = CGFloat.random(in: 1.3...2.7)
+                b.maneuverSign = Bool.random() ? 1 : -1
+            }
+            if b.tactic == .breakAway && b.tacticTime <= 0 {
+                b.tactic = .regroup
+                b.tacticTime = CGFloat.random(in: 0.8...2)
+            }
+            if b.tactic == .regroup && (b.tacticTime <= 0 || distance > 470) {
+                b.tactic = .intercept
+                b.tacticTime = CGFloat.random(in: 0.6...1.3)
+            }
+            let desired: CGFloat
+            switch b.tactic {
+            case .formation: desired = b.entryHeading
+            case .intercept:
+                // Lead the moving player instead of steering toward its present position.
+                let lead = min(1.05, distance / 450)
+                desired = atan2(dy + playerForward.dy * airspeed * lead,
+                                dx + playerForward.dx * airspeed * lead)
+            case .attack:
+                desired = bearing + b.targetOffset * (inRear ? 0.12 : 0.32)
+            case .breakAway:
+                // Keep moving, cross the opponent's flight path, then arc outward.
+                desired = b.heading + b.maneuverSign * 0.85
+            case .regroup:
+                desired = bearing + b.maneuverSign * 1.3
+            }
+            let turnDelta = atan2(sin(desired - b.heading), cos(desired - b.heading))
+            let turnRate: CGFloat = b.kind == 2 ? 0.95 : (b.kind == 1 ? 2.25 : 1.85)
+            let boundedTurn = max(-turnRate * dt, min(turnRate * dt, turnDelta))
+            b.heading += boundedTurn
+            let speedGoal: CGFloat = b.tactic == .breakAway ? (b.kind == 2 ? 205 : 315)
+                                    : b.tactic == .formation ? (b.kind == 2 ? 160 : 230)
+                                    : (b.kind == 2 ? 170 : 255)
+            b.speed += max(-95 * dt, min(95 * dt, speedGoal - b.speed))
             b.position.x += cos(b.heading) * b.speed * dt + scrolling.dx
             b.position.y += sin(b.heading) * b.speed * dt + scrolling.dy
             b.sprite.position = b.position
             b.sprite.zRotation = b.heading - .pi / 2
-            // Fire only when the player is in a narrow forward cone.
-            let relative = atan2(sin(targetHeading - b.heading), cos(targetHeading - b.heading))
-            if b.formationTime <= 0 && b.fireCooldown <= 0 && distance < 490 && abs(relative) < 0.22 {
+            let aimError = abs(atan2(sin(bearing - b.heading), cos(bearing - b.heading)))
+            if b.tactic == .attack && b.fireCooldown <= 0 && distance < 440 && aimError < 0.19 {
                 fire(from: b.position, angle: b.heading, hostile: true)
-                b.fireCooldown = CGFloat.random(in: 1.1...2.4)
+                b.fireCooldown = CGFloat.random(in: 0.9...1.75)
             }
+            b.previousDistance = distance
             bandits[i] = b
         }
+        // Ensure aircraft departing the screen have time to circle back, but
+        // eventually despawn a runaway pursuit to cap difficulty and workload.
         for i in bandits.indices.reversed() {
             let b = bandits[i]
-            if b.position.x < -600 || b.position.x > size.width + 600 || b.position.y < -600 || b.position.y > size.height + 600 {
-                b.sprite.removeFromParent(); bandits.remove(at: i)
-            } else if hypot(b.position.x - player.position.x, b.position.y - player.position.y) < 34 && gameTime > invulnerableUntil {
+            if b.position.x < -900 || b.position.x > size.width + 900 ||
+               b.position.y < -900 || b.position.y > size.height + 900 {
+                b.sprite.removeFromParent()
+                bandits.remove(at: i)
+            } else if hypot(b.position.x - player.position.x,
+                            b.position.y - player.position.y) < 31 && gameTime > invulnerableUntil {
                 takeDamage()
             }
         }
+        // Screen-edge threat alert for an opponent closing in from behind.
+        var rearThreat = false
+        for b in bandits {
+            let offsetX = b.position.x - player.position.x
+            let offsetY = b.position.y - player.position.y
+            let aft = offsetX * cos(heading) + offsetY * sin(heading)
+            let bearingToEnemy = atan2(offsetY, offsetX)
+            let relative = abs(atan2(sin(bearingToEnemy - heading), cos(bearingToEnemy - heading)))
+            if aft < -80 && relative > 2.4 && hypot(offsetX, offsetY) < 530 {
+                rearThreat = true
+                break
+            }
+        }
+        threat.text = rearThreat ? "⚠ SIX O'CLOCK — BANDIT BEHIND" : ""
     }
+
     private func fire(from origin: CGPoint, angle: CGFloat, hostile: Bool) {
         let round = SKShapeNode(rectOf: CGSize(width: 4, height: hostile ? 13 : 20), cornerRadius: 2)
         round.fillColor = hostile ? .orange : .yellow
@@ -408,11 +534,15 @@ private final class AirBattleScene: SKScene {
                         burst(at: bullet.position, count: 5)
                         consumed = true
                         if bandits[j].health <= 0 {
-                            burst(at: bandits[j].position, count: 18)
+                            burst(at: bandits[j].position, count: 30)
                             bandits[j].sprite.removeFromParent()
                             bandits.remove(at: j)
                             kills += 1
-                            score += 100 * wave
+                            if gameTime < comboDeadline { hitCombo += 1 } else { hitCombo = 1 }
+                            comboDeadline = gameTime + 3.6
+                            let award = 100 * wave * min(hitCombo, 4)
+                            score += award
+                            if hitCombo > 1 { flash("COMBO ×\(hitCombo)   +\(award)") } else { flash("SPLASH ONE   +\(award)") }
                         }
                         break
                     }
@@ -429,7 +559,7 @@ private final class AirBattleScene: SKScene {
     private func takeDamage() {
         health -= 1
         invulnerableUntil = gameTime + 0.75
-        burst(at: player.position, count: 15)
+        burst(at: player.position, count: 24)
         player.run(.sequence([.fadeAlpha(to: 0.25, duration: 0.1), .fadeAlpha(to: 1, duration: 0.25)]))
         if health <= 0 {
             gameOver = true
@@ -463,6 +593,7 @@ private final class AirBattleScene: SKScene {
     private func updateLabels() {
         hud.position = CGPoint(x: 23, y: size.height - 24)
         status.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
+        threat.position = CGPoint(x: size.width - 24, y: size.height - 51)
         hud.text = "VECTOR ACES  |  \(fighter.rawValue.uppercased())  |  WAVE \(wave)  |  KILLS \(kills)  |  SCORE \(score)  |  AIRFRAME \(max(0, health))/\(fighter.health)  |  SPEED \(Int(airspeed))"
     }
     private func restart() {
@@ -472,6 +603,10 @@ private final class AirBattleScene: SKScene {
         rounds.removeAll()
         gameTime = 0
         lastFormation = -8
+        lastWarning = -10
+        hitCombo = 0
+        comboDeadline = 0
+        threat.text = ""
         lastFire = -1
         health = fighter.health
         score = 0
