@@ -26,3 +26,12 @@ No third-party artwork, trademarks as game artwork, audio recordings, or unlicen
 Enemy formations now use V, echelon, and paired-flight layouts. After formation flight, fighters intercept the player's path, line up shots, break away and regroup for additional attacks. Fw 190s and Bf 109s have different turn rates; Ju 87s remain slower and less maneuverable. A six-o'clock warning shows nearby rear threats. Multiple kills in quick succession earn combo bonuses. Aircraft silhouettes have extra visual detail, and destruction effects are larger.
 
 This is unverified source until compiled and play-tested locally on macOS. Historical appearance, detailed sound design and full missions remain work to be done.
+
+## Visual and camera pass (November 13, 2026)
+
+- The fighter traverses the screen under its own velocity, with a soft-follow camera that pans only when it reaches an outer margin.
+- Aerial terrain has an original offline procedural raster inspired by overhead satellite photography (fields, vegetation, rivers and grain). **This is not licensed real satellite imagery**. A true NASA/USGS photographic texture is a future asset-provenance task.
+- Clouds now form irregular banks with soft radial opacity, varying scale and offsets; their shadows drift below.
+- Aircraft have additional panel lines, engines, exhaust details, wing control markings, and relative size differences between fighters and dive bombers.
+- No third-party map service or asset usage authorization is implied by this work.
+- macOS compilation and frame-rate verification still require local testing in Xcode.
