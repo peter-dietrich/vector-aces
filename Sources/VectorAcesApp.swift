@@ -283,6 +283,39 @@ private final class AirBattleScene: SKScene {
         prop.run(.repeatForever(.sequence([.scaleX(to: 0.35, duration: 0.07),
                                             .scaleX(to: 1.1, duration: 0.07)])))
         node.addChild(prop)
+        // Panel lines, gun ports, cowling and exhaust details scale with the wing.
+        let spine = SKShapeNode(rectOf: CGSize(width: 2, height: 42), cornerRadius: 1)
+        spine.position.y = -1
+        spine.fillColor = .black.withAlphaComponent(0.20)
+        spine.strokeColor = .clear
+        node.addChild(spine)
+        let engine = SKShapeNode(circleOfRadius: isThunderbolt ? 8 : 6)
+        engine.position.y = 30
+        engine.fillColor = color.withAlphaComponent(0.8)
+        engine.strokeColor = .black.withAlphaComponent(0.65)
+        engine.lineWidth = 1.2
+        node.addChild(engine)
+        for side in [-1.0, 1.0] {
+            let direction = CGFloat(side)
+            let aileron = SKShapeNode(rectOf: CGSize(width: span * 0.49, height: 2), cornerRadius: 0.5)
+            aileron.position = CGPoint(x: direction * span * 0.68, y: -6)
+            aileron.zRotation = direction * 0.06
+            aileron.fillColor = .black.withAlphaComponent(0.37)
+            aileron.strokeColor = .clear
+            node.addChild(aileron)
+            for j in 0..<3 {
+                let panel = SKShapeNode(rectOf: CGSize(width: 2.1, height: 5), cornerRadius: 0.3)
+                panel.position = CGPoint(x: direction * CGFloat(11 + j * 7), y: 9 - CGFloat(j) * 2)
+                panel.fillColor = .black.withAlphaComponent(0.58)
+                panel.strokeColor = .clear
+                node.addChild(panel)
+            }
+            let exhaust = SKShapeNode(rectOf: CGSize(width: 2.5, height: 8), cornerRadius: 1)
+            exhaust.position = CGPoint(x: direction * 8, y: 22)
+            exhaust.fillColor = SKColor(white: 0.16, alpha: 0.92)
+            exhaust.strokeColor = .clear
+            node.addChild(exhaust)
+        }
         return node
     }
 
@@ -343,7 +376,7 @@ private final class AirBattleScene: SKScene {
     private func terrainTexture(seed: Int) -> SKTexture {
         // Multi-frequency satellite-style raster. Vegetation, dry farmland,
         // forests, river beds and fine grain vary at different spatial scales.
-        let n = 768
+        let n = 384
         guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: n,
                                            pixelsHigh: n, bitsPerSample: 8,
                                            samplesPerPixel: 4, hasAlpha: true,
@@ -403,7 +436,9 @@ private final class AirBattleScene: SKScene {
         }
         let image = NSImage(size: NSSize(width: n, height: n))
         image.addRepresentation(bitmap)
-        return SKTexture(image: image)
+        let texture = SKTexture(image: image)
+        texture.filteringMode = .linear
+        return texture
     }
 
     private func cloudTexture(seed: Int) -> SKTexture {
@@ -432,7 +467,9 @@ private final class AirBattleScene: SKScene {
             }
             return true
         }
-        return SKTexture(image: image)
+        let texture = SKTexture(image: image)
+        texture.filteringMode = .linear
+        return texture
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -476,7 +513,7 @@ private final class AirBattleScene: SKScene {
                 while node.position.x > size.width + strideX * 1.4 { node.position.x -= strideX * 3 }
                 while node.position.y < -strideY * 0.55 { node.position.y += strideY * 3 }
                 while node.position.y > size.height + strideY * 1.4 { node.position.y -= strideY * 3 }
-            } else if node.name == "cloud" {
+            } else if node.name == "cloud" || node.name == "shadow" {
                 let wind: CGFloat = 8 * dt
                 node.position.x += wind
                 if node.position.x < -460 { node.position.x += size.width + 980 }
@@ -528,6 +565,7 @@ private final class AirBattleScene: SKScene {
             sprite.zPosition = 15
             let color = kind == 2 ? SKColor(red: 0.43, green: 0.45, blue: 0.33, alpha: 1) : SKColor(red: 0.45, green: 0.47, blue: 0.43, alpha: 1)
             sprite.addChild(drawAircraft(kind: kind, color: color))
+            sprite.setScale(kind == 2 ? 1.17 : kind == 1 ? 0.87 : 0.96)
             addChild(sprite)
             bandits.append(Bandit(sprite: sprite, position: location, heading: toward, speed: kind == 2 ? 150 : CGFloat.random(in: 180...240),
                                   health: kind == 2 ? 5 : (wave >= 3 ? 3 : 2), kind: kind, formationTime: CGFloat.random(in: 1.7...3.7) + row * 0.25,
