@@ -240,7 +240,7 @@ private struct AcesSettings: View {
                                         .fixedSize(horizontal:false,vertical:true)
                                 }
                                 .padding(18)
-                                .frame(width:330,minHeight:570)
+                                .frame(width:330).frame(minHeight:570)
                                 .background(AcesStyle.panel,in:RoundedRectangle(cornerRadius:14))
                                 VStack(alignment:.leading,spacing:12) {
                                     HStack {
