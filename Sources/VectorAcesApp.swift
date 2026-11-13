@@ -287,39 +287,154 @@ private final class AirBattleScene: SKScene {
     }
 
     private func buildGround() {
-        // World-anchored ground elements scroll beneath a centered aircraft.
-        for i in 0..<62 {
-            let block = SKShapeNode(ellipseOf: CGSize(width: CGFloat.random(in: 48...155), height: CGFloat.random(in: 40...115)))
-            block.fillColor = i % 4 == 0 ? SKColor(red: 0.18, green: 0.28, blue: 0.22, alpha: 1) : SKColor(red: 0.23, green: 0.38, blue: 0.27, alpha: 1)
-            block.strokeColor = .clear
-            block.position = CGPoint(x: CGFloat.random(in: -180...1380), y: CGFloat.random(in: -150...900))
-            block.zPosition = -12
-            environment.addChild(block)
-        }
-        for i in 0..<16 {
-            let field = SKShapeNode(rectOf: CGSize(width: CGFloat.random(in: 75...155), height: CGFloat.random(in: 65...145)), cornerRadius: 2)
-            field.fillColor = i % 2 == 0 ? SKColor(red: 0.36, green: 0.40, blue: 0.23, alpha: 0.7) : SKColor(red: 0.4, green: 0.42, blue: 0.29, alpha: 0.8)
-            field.strokeColor = .white.withAlphaComponent(0.06)
-            field.zRotation = CGFloat.random(in: -0.2...0.2)
-            field.position = CGPoint(x: CGFloat.random(in: -140...1280), y: CGFloat.random(in: -80...850))
-            field.zPosition = -10
-            environment.addChild(field)
-        }
-        for i in 0..<14 {
-            let cloud = SKNode()
-            for j in 0..<4 {
-                let puff = SKShapeNode(ellipseOf: CGSize(width: 105, height: 47))
-                puff.fillColor = .white.withAlphaComponent(0.12)
-                puff.strokeColor = .clear
-                puff.position.x = CGFloat(j) * 25
-                cloud.addChild(puff)
+        // Satellite-style terrain is rendered locally and needs no network connection.
+        // A real geo-referenced texture can later replace this tile source with
+        // properly credited public-domain NASA/USGS imagery.
+        let textures = (0..<4).map { terrainTexture(seed: $0 * 73 + 19) }
+        for row in -1...1 {
+            for col in -1...1 {
+                let tile = SKSpriteNode(texture: textures[((row + 1) * 3 + col + 1) % 4],
+                                        size: CGSize(width: 1536, height: 1536))
+                tile.name = "terrain"
+                tile.zPosition = -20
+                tile.position = CGPoint(x: CGFloat(col) * 1536 + 768,
+                                        y: CGFloat(row) * 1536 + 768)
+                environment.addChild(tile)
+                terrainTiles.append(tile)
             }
-            cloud.position = CGPoint(x: CGFloat.random(in: -150...1300), y: CGFloat.random(in: -100...850))
-            cloud.zPosition = 28
-            cloud.name = "cloud"
-            environment.addChild(cloud)
+        }
+
+        // Organize cloud populations into fronts, broken banks and isolated puffs;
+        // shadow layers give them height without obscuring dogfight visibility.
+        let shapes = (0..<4).map { cloudTexture(seed: $0) }
+        for bank in 0..<4 {
+            let orientation: CGFloat = bank % 2 == 0 ? -0.25 : 0.31
+            for cluster in 0..<7 {
+                let spread = CGFloat(cluster - 3)
+                let drift = CGFloat(bank) * 350
+                let x = CGFloat.random(in: -210...210) + drift + spread * 155
+                let y = CGFloat.random(in: -95...95) + CGFloat(bank) * 290 +
+                        spread * (bank % 2 == 0 ? 48 : -65)
+                let cloud = SKSpriteNode(texture: shapes[(bank + cluster) % shapes.count])
+                let scale = CGFloat.random(in: 0.68...1.45)
+                cloud.size = CGSize(width: 450 * scale, height: 200 * scale)
+                cloud.alpha = CGFloat.random(in: 0.53...0.83)
+                cloud.position = CGPoint(x: x, y: y)
+                cloud.zRotation = orientation + CGFloat.random(in: -0.12...0.12)
+                cloud.name = "cloud"
+                cloud.zPosition = 37
+                environment.addChild(cloud)
+                cloudClusters.append(cloud)
+
+                let shadow = SKSpriteNode(texture: shapes[(bank + cluster) % shapes.count])
+                shadow.color = SKColor.black
+                shadow.colorBlendFactor = 1
+                shadow.alpha = 0.15
+                shadow.size = CGSize(width: 440 * scale, height: 180 * scale)
+                shadow.position = CGPoint(x: x + 58, y: y - 72)
+                shadow.zRotation = cloud.zRotation
+                shadow.zPosition = -4
+                shadow.name = "shadow"
+                environment.addChild(shadow)
+            }
         }
     }
+
+    private func terrainTexture(seed: Int) -> SKTexture {
+        // Multi-frequency satellite-style raster. Vegetation, dry farmland,
+        // forests, river beds and fine grain vary at different spatial scales.
+        let n = 768
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: n,
+                                           pixelsHigh: n, bitsPerSample: 8,
+                                           samplesPerPixel: 4, hasAlpha: true,
+                                           isPlanar: false, colorSpaceName: .deviceRGB,
+                                           bytesPerRow: n * 4, bitsPerPixel: 32),
+              let bytes = bitmap.bitmapData else {
+            return SKTexture(image: NSImage(size: CGSize(width: 2, height: 2)))
+        }
+        func hash(_ x: Int, _ y: Int, _ salt: Int) -> Double {
+            let a = sin(Double(x * 127 + y * 311 + seed * 31 + salt * 971) * 0.0174533) * 43758.5453
+            return a - floor(a)
+        }
+        func smooth(_ x: Double, _ y: Double, _ scale: Double, _ salt: Int) -> Double {
+            let xx = x / scale, yy = y / scale
+            let x0 = Int(floor(xx)), y0 = Int(floor(yy))
+            let fx = xx - floor(xx), fy = yy - floor(yy)
+            let u = fx * fx * (3 - 2 * fx)
+            let v = fy * fy * (3 - 2 * fy)
+            let a = hash(x0, y0, salt), b = hash(x0 + 1, y0, salt)
+            let c = hash(x0, y0 + 1, salt), d = hash(x0 + 1, y0 + 1, salt)
+            return (a * (1-u) + b*u) * (1-v) + (c * (1-u) + d*u) * v
+        }
+        let stride = bitmap.bytesPerRow
+        for y in 0..<n {
+            for x in 0..<n {
+                let xx = Double(x), yy = Double(y)
+                let hills = smooth(xx, yy, 155, 1) * 0.48 +
+                            smooth(xx, yy, 59, 2) * 0.31 +
+                            smooth(xx, yy, 18, 3) * 0.16 +
+                            hash(x, y, 4) * 0.05
+                let farmland = smooth(xx, yy, 240, 5)
+                let fieldStripe = Int((xx + sin(yy * 0.009) * 32) / 45) % 3
+                let forest = hills > 0.55 || (hills > 0.47 && farmland > 0.63)
+                let riverX = 352 + sin(yy / 84 + Double(seed)) * 118 +
+                             sin(yy / 33 + Double(seed) * 0.27) * 23
+                let riverDistance = abs(xx - riverX)
+                let r: Double, g: Double, b: Double
+                if riverDistance < 11 {
+                    (r,g,b) = (49 + hills*18, 85 + hills*25, 101 + hills*25)
+                } else if riverDistance < 19 {
+                    (r,g,b) = (94 + hills*18, 102 + hills*25, 76 + hills*18)
+                } else if forest {
+                    (r,g,b) = (33 + hills*30, 66 + hills*33, 38 + hills*21)
+                } else if fieldStripe == 0 {
+                    (r,g,b) = (93 + hills*51, 106 + hills*43, 57 + hills*24)
+                } else if fieldStripe == 1 {
+                    (r,g,b) = (103 + hills*43, 112 + hills*35, 68 + hills*20)
+                } else {
+                    (r,g,b) = (114 + hills*45, 107 + hills*42, 67 + hills*21)
+                }
+                let pixel = y * stride + x * 4
+                bytes[pixel] = UInt8(max(0, min(255, Int(r))))
+                bytes[pixel+1] = UInt8(max(0, min(255, Int(g))))
+                bytes[pixel+2] = UInt8(max(0, min(255, Int(b))))
+                bytes[pixel+3] = 255
+            }
+        }
+        let image = NSImage(size: NSSize(width: n, height: n))
+        image.addRepresentation(bitmap)
+        return SKTexture(image: image)
+    }
+
+    private func cloudTexture(seed: Int) -> SKTexture {
+        // Feathered radial-gradient cloudlets form coherent, uneven cumuliform
+        // banks instead of circles arranged in perfectly repeated rows.
+        let width = 512, height = 256
+        let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            ctx.clear(CGRect(x: 0, y: 0, width: width, height: height))
+            let space = CGColorSpaceCreateDeviceRGB()
+            for i in 0..<50 {
+                let centerX = CGFloat(i % 10) * 42 + 56 +
+                              sin(CGFloat(i * 13 + seed * 9)) * 24
+                let centerY = 125 + CGFloat(i / 10 - 2) * 21 +
+                              cos(CGFloat(i * 7 + seed * 11)) * 29
+                let radius = CGFloat(29 + (i * 19 + seed * 13) % 37)
+                let tone: CGFloat = CGFloat((i * 17 + seed * 5) % 10) / 100
+                let inner = CGColor(colorSpace: space, components: [1, 1, 1, 0.45 + tone])!
+                let outer = CGColor(colorSpace: space, components: [0.82, 0.88, 0.92, 0])!
+                guard let grad = CGGradient(colorsSpace: space, colors: [inner, outer] as CFArray,
+                                            locations: [0, 1]) else { continue }
+                ctx.drawRadialGradient(grad,
+                                       startCenter: CGPoint(x: centerX - 9, y: centerY + 8), startRadius: 2,
+                                       endCenter: CGPoint(x: centerX, y: centerY), endRadius: radius,
+                                       options: [])
+            }
+            return true
+        }
+        return SKTexture(image: image)
+    }
+
     override func update(_ currentTime: TimeInterval) {
         if lastTime == 0 { lastTime = currentTime; return }
         let dt = CGFloat(min(currentTime - lastTime, 0.04))
