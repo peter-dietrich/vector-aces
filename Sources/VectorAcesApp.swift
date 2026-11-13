@@ -76,7 +76,7 @@ private struct FighterIllustration: View {
             // High contrast overhead technical illustration, drawn from
             // original paths rather than unlicensed historical imagery.
             var outline = Path()
-            let wing = fighter == .lightning ? 72.0 : fighter == .thunderbolt ? 67.0 : 59.0
+            let wing: CGFloat = fighter == .lightning ? 72 : fighter == .thunderbolt ? 67 : 59
             let pts: [CGPoint] = [
                 .init(x:-7,y:75),.init(x:-11,y:38),
                 .init(x:-wing*0.85,y:13),.init(x:-wing,y:4),
@@ -94,7 +94,7 @@ private struct FighterIllustration: View {
             outline.closeSubpath()
             context.fill(outline, with: .color(Color(red: 0.54, green: 0.69, blue: 0.7).opacity(0.93)))
             context.stroke(outline, with: .color(AcesStyle.ice), lineWidth: 2)
-            for side in [-1.0,1.0] {
+            for side in [CGFloat(-1), CGFloat(1)] {
                 let x = center.x + side * wing * 0.63 * unit
                 let circle = Path(ellipseIn:CGRect(x:x-9*unit,y:center.y-9*unit,width:18*unit,height:18*unit))
                 context.fill(circle, with:.color(.white.opacity(0.94)))
@@ -175,6 +175,7 @@ private struct AcesSettings: View {
     @AppStorage("aces.selectedFighter") private var selectedFighter = Fighter.mustang.rawValue
     @State private var started = false
     @State private var showingSettings = false
+    @AppStorage("aces.hasSave") private var hasSave = false
     private var fighter: Fighter { Fighter(rawValue:selectedFighter) ?? .mustang }
     var body: some Scene {
         WindowGroup("Vector Aces") {
@@ -230,7 +231,19 @@ private struct AcesSettings: View {
                                         }.buttonStyle(.plain)
                                     }
                                     Spacer(minLength:12)
-                                    Button("START SORTIE") { started = true }
+                                    if hasSave {
+                                        Button("RESUME SORTIE") {
+                                            UserDefaults.standard.set(true, forKey: "aces.resumeRequested")
+                                            started = true
+                                        }
+                                        .font(.system(size:13,weight:.bold,design:.monospaced))
+                                        .frame(maxWidth:.infinity).padding(12)
+                                        .background(AcesStyle.ice.opacity(0.22),in:RoundedRectangle(cornerRadius:8))
+                                    }
+                                    Button("START NEW SORTIE") {
+                                        UserDefaults.standard.set(false, forKey: "aces.resumeRequested")
+                                        started = true
+                                    }
                                         .font(.system(size:17,weight:.black,design:.monospaced))
                                         .frame(maxWidth:.infinity).padding(14)
                                         .background(AcesStyle.amber,in:RoundedRectangle(cornerRadius:8))
@@ -261,7 +274,8 @@ private struct AcesSettings: View {
                                         .frame(height:226)
                                         .background(.black.opacity(0.18),in:RoundedRectangle(cornerRadius:8))
                                     LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:10) {
-                                        ForEach(fighter.stats,id:\.0) { stat in
+                                        ForEach(0..<fighter.stats.count,id:\.self) { index in
+                                            let stat = fighter.stats[index]
                                             VStack(alignment:.leading,spacing:5) {
                                                 HStack {
                                                     Text(stat.0).font(.system(size:10,weight:.bold,design:.monospaced))
@@ -423,9 +437,14 @@ private final class AirBattleScene: SKScene {
         threat.zPosition = 101
         addChild(threat)
         installTelemetry()
+        if prefs.bool(forKey: "aces.resumeRequested") { loadRun() }
+        prefs.set(false, forKey: "aces.resumeRequested")
         updateLabels()
         sounds.play(.engine, volume: prefs.double(forKey: "aces.effectsVolume") * 0.15)
         view.window?.makeFirstResponder(self)
+    }
+    override func willMove(from view: SKView) {
+        if !gameOver && !deathStarted { saveRun() }
     }
     override func didChangeSize(_ oldSize: CGSize) {
         hud.position = CGPoint(x: 24, y: size.height - 22)
@@ -865,6 +884,7 @@ private final class AirBattleScene: SKScene {
         if pausedGame || gameOver { return }
         if deathStarted { return }
         gameTime += dt
+        if Int(gameTime) % 12 == 0 && Int(gameTime - dt) % 12 != 0 { saveRun() }
         wave = max(1, prefs.integer(forKey: "aces.startWave")) + Int(gameTime / 36)
         let left = keys.contains(123) || keys.contains(0)
         let right = keys.contains(124) || keys.contains(2)
@@ -1183,6 +1203,38 @@ private final class AirBattleScene: SKScene {
             if self?.gameOver == false && self?.pausedGame == false { self?.status.text = "" }
         }]))
     }
+    private func saveRun() {
+        let snapshot: [String: Any] = [
+            "fighter": fighter.rawValue, "score":score, "kills":kills,
+            "health":health, "ammo":ammo, "elapsed":Double(gameTime),
+            "altitude":Double(altitude), "airspeed":Double(airspeed),
+            "heading":Double(heading), "playerX":Double(player.position.x),
+            "playerY":Double(player.position.y),
+            "offsetX":Double(terrainOffset.x), "offsetY":Double(terrainOffset.y)
+        ]
+        prefs.set(snapshot, forKey:"aces.savedRun")
+        prefs.set(true, forKey:"aces.hasSave")
+    }
+    private func loadRun() {
+        guard let saved = prefs.dictionary(forKey:"aces.savedRun"),
+              saved["fighter"] as? String == fighter.rawValue else { return }
+        score = saved["score"] as? Int ?? 0
+        kills = saved["kills"] as? Int ?? 0
+        health = saved["health"] as? Int ?? fighter.health
+        ammo = saved["ammo"] as? Int ?? fighter.ammunition
+        gameTime = CGFloat(saved["elapsed"] as? Double ?? 0)
+        altitude = CGFloat(saved["altitude"] as? Double ?? 7600)
+        airspeed = CGFloat(saved["airspeed"] as? Double ?? 210)
+        heading = CGFloat(saved["heading"] as? Double ?? (.pi/2))
+        player.position = CGPoint(x:CGFloat(saved["playerX"] as? Double ?? Double(size.width/2)),
+                                  y:CGFloat(saved["playerY"] as? Double ?? Double(size.height/2)))
+        terrainOffset = CGPoint(x:CGFloat(saved["offsetX"] as? Double ?? 0),
+                                y:CGFloat(saved["offsetY"] as? Double ?? 0))
+        updateTerrainTiles(initial:true)
+        player.zRotation = heading - .pi/2
+        lastFormation = gameTime - 5
+    }
+
     private var effectsVolume: Double {
         let value = prefs.object(forKey: "aces.effectsVolume") as? Double
         return value ?? 0.7
@@ -1231,6 +1283,8 @@ private final class AirBattleScene: SKScene {
         crashPlane(player,position:player.position,duration:1.65)
         run(.sequence([.wait(forDuration:1.7),.run { [weak self] in
             self?.gameOver = true
+            self?.prefs.set(false, forKey: "aces.hasSave")
+            self?.prefs.removeObject(forKey: "aces.savedRun")
             self?.status.text = "SHOT DOWN — RETURN TO RESTART"
         }]))
     }
@@ -1427,6 +1481,8 @@ private final class AirBattleScene: SKScene {
         comboDeadline = 0
         threat.text = ""
         lastFire = -1
+        prefs.set(false, forKey: "aces.hasSave")
+        prefs.removeObject(forKey: "aces.savedRun")
         health = fighter.health
         deathStarted = false
         player.removeAllActions()
