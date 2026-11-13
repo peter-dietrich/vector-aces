@@ -183,7 +183,7 @@ private final class AirBattleScene: SKScene {
     override func didChangeSize(_ oldSize: CGSize) {
         hud.position = CGPoint(x: 24, y: size.height - 22)
         status.position = CGPoint(x: size.width / 2, y: size.height / 2 + 80)
-        threat.position = CGPoint(x: size.width - 25, y: size.height - 50)
+        threat.position = CGPoint(x: size.width - 24, y: size.height - 277)
         layoutTelemetry()
         if player.position == .zero { player.position = CGPoint(x: size.width / 2, y: size.height / 2) }
     }
@@ -990,7 +990,7 @@ private final class AirBattleScene: SKScene {
             let dx = bandit.position.x - player.position.x
             let dy = bandit.position.y - player.position.y
             // Player-forward is always up on the radar.
-            let lateral = -sin(heading) * dx + cos(heading) * dy
+            let lateral = sin(heading) * dx - cos(heading) * dy
             let ahead = cos(heading) * dx + sin(heading) * dy
             let px = lateral * 0.16
             let py = ahead * 0.16
@@ -1008,7 +1008,7 @@ private final class AirBattleScene: SKScene {
     private func updateLabels() {
         hud.position = CGPoint(x: 23, y: size.height - 24)
         status.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
-        threat.position = CGPoint(x: size.width - 24, y: size.height - 51)
+        threat.position = CGPoint(x: size.width - 24, y: size.height - 277)
         hud.text = "VECTOR ACES  /  WWII AIR COMBAT"
         let rows = [
             "FLIGHT TELEMETRY",
