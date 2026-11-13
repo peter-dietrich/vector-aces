@@ -212,7 +212,10 @@ private struct AcesSettings: View {
                                     Text("SELECT AIRCRAFT").font(.system(size:12,weight:.bold,design:.monospaced))
                                         .tracking(2).foregroundStyle(AcesStyle.ice)
                                     ForEach(Fighter.allCases) { choice in
-                                        Button { selectedFighter = choice.rawValue } label: {
+                                        Button {
+                                            selectedFighter = choice.rawValue
+                                            CombatAudio.shared.play(.menu,volume:0.16)
+                                        } label: {
                                             VStack(alignment:.leading,spacing:7) {
                                                 HStack {
                                                     Text(choice.rawValue.uppercased())
@@ -241,6 +244,7 @@ private struct AcesSettings: View {
                                         .background(AcesStyle.ice.opacity(0.22),in:RoundedRectangle(cornerRadius:8))
                                     }
                                     Button("START NEW SORTIE") {
+                                        CombatAudio.shared.play(.menu,volume:0.18)
                                         UserDefaults.standard.set(false, forKey: "aces.resumeRequested")
                                         started = true
                                     }
@@ -400,7 +404,7 @@ private final class AirBattleScene: SKScene {
     private let attitude = SKNode()
     private let attitudePanel = SKShapeNode()
     private let radarSweepNode = SKNode()
-    private let sounds = CombatAudio()
+    private let sounds = CombatAudio.shared
     private let prefs = UserDefaults.standard
 
     init(size: CGSize, fighter: Fighter) {
@@ -440,11 +444,12 @@ private final class AirBattleScene: SKScene {
         if prefs.bool(forKey: "aces.resumeRequested") { loadRun() }
         prefs.set(false, forKey: "aces.resumeRequested")
         updateLabels()
-        sounds.play(.engine, volume: prefs.double(forKey: "aces.effectsVolume") * 0.15)
+        sounds.startEngine(volume:effectsVolume * 0.18)
         view.window?.makeFirstResponder(self)
     }
     override func willMove(from view: SKView) {
         if !gameOver && !deathStarted { saveRun() }
+        sounds.stopEngine()
     }
     override func didChangeSize(_ oldSize: CGSize) {
         hud.position = CGPoint(x: 24, y: size.height - 22)
@@ -904,6 +909,7 @@ private final class AirBattleScene: SKScene {
         if brake { airspeed -= 235 * dt }
         airspeed += (-climbRate * 0.012) * dt
         airspeed = max(105, min(fighter.speed + 95, airspeed))
+        sounds.engineVolume = Float(effectsVolume * (0.08 + Double(airspeed) / 1900))
         player.zRotation = heading - .pi / 2
         let velocity = CGVector(dx: cos(heading) * airspeed, dy: sin(heading) * airspeed)
         // Free flight with a generous camera dead-zone. The aircraft crosses the
@@ -1083,6 +1089,10 @@ private final class AirBattleScene: SKScene {
             let bearingToEnemy = atan2(offsetY, offsetX)
             let relative = abs(atan2(sin(bearingToEnemy - heading), cos(bearingToEnemy - heading)))
             if aft < -80 && relative > 2.4 && hypot(offsetX, offsetY) < 530 {
+                if gameTime - lastWarning > 4 {
+                    sounds.play(.warning,volume:effectsVolume * 0.3)
+                    lastWarning = gameTime
+                }
                 rearThreat = true
                 break
             }
@@ -1178,6 +1188,7 @@ private final class AirBattleScene: SKScene {
         burst(at: player.position, count: 24)
         sounds.play(.hit, volume: effectsVolume * 0.45)
         if health <= 0 {
+            sounds.stopEngine()
             beginPlayerCrash()
         } else {
             player.run(.sequence([.fadeAlpha(to: 0.25, duration: 0.1), .fadeAlpha(to: 1, duration: 0.25)]))
@@ -1516,15 +1527,38 @@ private final class AirBattleScene: SKScene {
 }
 
 private final class CombatAudio {
-    enum Effect { case engine, gun, hit, explosion }
+    enum Effect { case engine, gun, hit, explosion, warning, menu }
+    static let shared = CombatAudio()
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
+    private let enginePlayer = AVAudioPlayerNode()
+    var engineVolume: Float = 0.12 { didSet { enginePlayer.volume = engineVolume } }
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
     init() {
         engine.attach(player)
+        engine.attach(enginePlayer)
         engine.connect(player,to:engine.mainMixerNode,format:format)
+        engine.connect(enginePlayer,to:engine.mainMixerNode,format:format)
         try? engine.start()
     }
+    func startEngine(volume:Double) {
+        if !engine.isRunning { try? engine.start() }
+        guard engine.isRunning else { return }
+        enginePlayer.stop()
+        let count = 44100
+        guard let buffer = AVAudioPCMBuffer(pcmFormat:format,frameCapacity:AVAudioFrameCount(count)),
+              let samples = buffer.floatChannelData?.pointee else { return }
+        buffer.frameLength = AVAudioFrameCount(count)
+        for i in 0..<count {
+            let t = Double(i) / 44100
+            let envelope = 0.7 + 0.3 * sin(2 * .pi * 5 * t)
+            samples[i] = Float((sin(2 * .pi * 76 * t) + 0.23 * sin(2 * .pi * 152 * t)) * envelope * 0.5)
+        }
+        enginePlayer.scheduleBuffer(buffer,at:nil,options:.loops,completionHandler:nil)
+        engineVolume = Float(volume)
+        enginePlayer.play()
+    }
+    func stopEngine() { enginePlayer.stop() }
     func play(_ effect: Effect, volume: Double) {
         guard volume > 0 else { return }
         if !engine.isRunning { try? engine.start() }
@@ -1535,6 +1569,8 @@ private final class CombatAudio {
         case .gun: duration = 0.11
         case .hit: duration = 0.22
         case .explosion: duration = 0.85
+        case .warning: duration = 0.18
+        case .menu: duration = 0.11
         }
         let count = Int(44100 * duration)
         guard let buffer = AVAudioPCMBuffer(pcmFormat:format,frameCapacity:AVAudioFrameCount(count)),
@@ -1554,6 +1590,10 @@ private final class CombatAudio {
                 wave = (noise * 0.65 + sin(2 * .pi * 145 * t) * 0.35) * envelope
             case .explosion:
                 wave = (noise * 0.75 + sin(2 * .pi * (56 - t * 24) * t) * 0.25) * envelope * envelope
+            case .warning:
+                wave = sin(2 * .pi * 820 * t) * envelope
+            case .menu:
+                wave = sin(2 * .pi * 620 * t) * envelope
             }
             samples[i] = Float(max(-0.85,min(0.85,wave * volume)))
         }
