@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import SpriteKit
+import AVFoundation
 
 enum Fighter: String, CaseIterable, Identifiable {
     case mustang = "P-51D Mustang", thunderbolt = "P-47 Thunderbolt", lightning = "P-38 Lightning", warhawk = "P-40 Warhawk"
@@ -375,10 +376,23 @@ private final class AirBattleScene: SKScene {
     private let radarPanel = SKShapeNode()
     private let radarContacts = SKNode()
     private var gunCycle = 0
+    private var ammo: Int
+    private var altitude: CGFloat = 7600
+    private var climbRate: CGFloat = 0
+    private var bankAngle: CGFloat = 0
+    private var deathStarted = false
+    private var radarSweep: CGFloat = 0
+    private var lastRadarRender: CGFloat = -1
+    private let attitude = SKNode()
+    private let attitudePanel = SKShapeNode()
+    private let radarSweepNode = SKNode()
+    private let sounds = CombatAudio()
+    private let prefs = UserDefaults.standard
 
     init(size: CGSize, fighter: Fighter) {
         self.fighter = fighter
         self.health = fighter.health
+        self.ammo = fighter.ammunition
         super.init(size: size)
         scaleMode = .resizeFill
         anchorPoint = .zero
@@ -393,6 +407,7 @@ private final class AirBattleScene: SKScene {
         player.zPosition = 20
         player.addChild(drawAircraft(kind: -1, color: fighter.color))
         player.zRotation = heading - .pi / 2
+        player.setScale(0.9)
         addChild(player)
         hud.fontSize = 14
         hud.horizontalAlignmentMode = .left
@@ -409,6 +424,7 @@ private final class AirBattleScene: SKScene {
         addChild(threat)
         installTelemetry()
         updateLabels()
+        sounds.play(.engine, volume: prefs.double(forKey: "aces.effectsVolume") * 0.15)
         view.window?.makeFirstResponder(self)
     }
     override func didChangeSize(_ oldSize: CGSize) {
@@ -848,7 +864,7 @@ private final class AirBattleScene: SKScene {
         lastTime = currentTime
         if pausedGame || gameOver { return }
         gameTime += dt
-        wave = 1 + Int(gameTime / 36)
+        wave = max(1, prefs.integer(forKey: "aces.startWave")) + Int(gameTime / 36)
         let left = keys.contains(123) || keys.contains(0)
         let right = keys.contains(124) || keys.contains(2)
         let thrust = keys.contains(126) || keys.contains(13)
@@ -856,6 +872,12 @@ private final class AirBattleScene: SKScene {
         let turnRate: CGFloat = fighter == .thunderbolt ? 2.25 : 2.8
         if left { heading += turnRate * dt }
         if right { heading -= turnRate * dt }
+        let bankTarget: CGFloat = left ? -0.65 : right ? 0.65 : 0
+        bankAngle += (bankTarget - bankAngle) * min(1, dt * 3.6)
+        if keys.contains(12) { climbRate = min(650, climbRate + 950 * dt) }
+        else if keys.contains(14) { climbRate = max(-900, climbRate - 1050 * dt) }
+        else { climbRate += (0 - climbRate) * min(1, dt * 3) }
+        altitude = max(300, min(30000, altitude + climbRate * dt))
         if thrust { airspeed += 205 * dt }
         if brake { airspeed -= 235 * dt }
         airspeed = max(105, min(fighter.speed + 95, airspeed))
@@ -892,7 +914,8 @@ private final class AirBattleScene: SKScene {
             firePlayerWeapons()
             lastFire = gameTime
         }
-        if gameTime - lastFormation > max(8, 13.5 - CGFloat(wave) * 0.35) && bandits.count < 15 {
+        radarSweep += dt * 1.85
+        if gameTime - lastFormation > max(8, 13.5 - CGFloat(wave) * 0.35) / CGFloat(max(0.5, prefs.double(forKey: "aces.enemyDensity") == 0 ? 1 : prefs.double(forKey: "aces.enemyDensity"))) && bandits.count < 15 {
             spawnFormation()
             lastFormation = gameTime
         }
@@ -1046,6 +1069,9 @@ private final class AirBattleScene: SKScene {
     private func firePlayerWeapons() {
         // Wing-mounted .50-caliber guns on P-51, P-47 and P-40;
         // P-38 concentrates its cannon and machine guns in the nose.
+        if ammo < 2 && !prefs.bool(forKey: "aces.unlimitedAmmo") { return }
+        if !prefs.bool(forKey: "aces.unlimitedAmmo") { ammo -= 2 }
+        sounds.play(.gun, volume: effectsVolume * 0.25)
         gunCycle += 1
         let barrelX: CGFloat
         switch fighter {
@@ -1099,8 +1125,8 @@ private final class AirBattleScene: SKScene {
                         burst(at: bullet.position, count: 5)
                         consumed = true
                         if bandits[j].health <= 0 {
-                            burst(at: bandits[j].position, count: 30)
-                            bandits[j].sprite.removeFromParent()
+                            crashPlane(bandits[j].sprite, position: bandits[j].position, duration: 1.05)
+                            sounds.play(.explosion, volume: effectsVolume * 0.65)
                             bandits.remove(at: j)
                             kills += 1
                             if gameTime < comboDeadline { hitCombo += 1 } else { hitCombo = 1 }
@@ -1125,10 +1151,11 @@ private final class AirBattleScene: SKScene {
         health -= 1
         invulnerableUntil = gameTime + 0.75
         burst(at: player.position, count: 24)
-        player.run(.sequence([.fadeAlpha(to: 0.25, duration: 0.1), .fadeAlpha(to: 1, duration: 0.25)]))
+        sounds.play(.hit, volume: effectsVolume * 0.45)
         if health <= 0 {
-            gameOver = true
-            status.text = "SHOT DOWN — RETURN TO RESTART"
+            beginPlayerCrash()
+        } else {
+            player.run(.sequence([.fadeAlpha(to: 0.25, duration: 0.1), .fadeAlpha(to: 1, duration: 0.25)]))
         } else {
             flash("HIT! AIRFRAME DAMAGED")
         }
@@ -1155,10 +1182,121 @@ private final class AirBattleScene: SKScene {
             if self?.gameOver == false && self?.pausedGame == false { self?.status.text = "" }
         }]))
     }
+    private var effectsVolume: Double {
+        let value = prefs.object(forKey: "aces.effectsVolume") as? Double
+        return value ?? 0.7
+    }
+    private func crashPlane(_ plane: SKNode, position: CGPoint, duration: TimeInterval) {
+        plane.removeAllActions()
+        let smoke = SKEmitterNode()
+        smoke.particleBirthRate = 65
+        smoke.particleLifetime = 0.7
+        smoke.particleSpeed = 24
+        smoke.particleSpeedRange = 20
+        smoke.particleAlpha = 0.6
+        smoke.particleAlphaSpeed = -0.8
+        smoke.particleScale = 0.13
+        smoke.particleScaleSpeed = 0.1
+        smoke.particleColor = .darkGray
+        smoke.particleColorBlendFactor = 1
+        let particle = SKTexture(image: NSImage(size: CGSize(width: 8,height: 8), flipped:false) { rect in
+            NSColor.white.setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            return true
+        })
+        smoke.particleTexture = particle
+        plane.addChild(smoke)
+        plane.run(.sequence([
+            .group([
+                .rotate(byAngle: CGFloat.pi * 2.2, duration:duration),
+                .moveBy(x: CGFloat.random(in:-90...90), y:-165, duration:duration),
+                .scale(to:0.14,duration:duration),
+                .fadeAlpha(to:0.3,duration:duration)
+            ]),
+            .run { [weak self] in
+                self?.burst(at:plane.position,count:65)
+                self?.sounds.play(.explosion,volume:(self?.effectsVolume ?? 0.7) * 0.95)
+                self?.shakeCamera()
+            },
+            .removeFromParent()
+        ]))
+    }
+    private func beginPlayerCrash() {
+        if deathStarted { return }
+        deathStarted = true
+        status.text = "MAYDAY — AIRCRAFT GOING DOWN"
+        keys.removeAll()
+        sounds.play(.explosion,volume:effectsVolume * 0.45)
+        crashPlane(player,position:player.position,duration:1.65)
+        run(.sequence([.wait(forDuration:1.7),.run { [weak self] in
+            self?.gameOver = true
+            self?.status.text = "SHOT DOWN — RETURN TO RESTART"
+        }]))
+    }
+    private func shakeCamera() {
+        let intensity = CGFloat(prefs.object(forKey: "aces.screenShake") as? Double ?? 0.7)
+        guard intensity > 0 else { return }
+        // Shake the world, not the HUD.
+        let shakes: [SKAction] = (0..<10).flatMap { i -> [SKAction] in
+            let strength = intensity * CGFloat(10-i)
+            return [.moveBy(x:CGFloat.random(in:-strength...strength),
+                            y:CGFloat.random(in:-strength...strength),duration:0.025),
+                    .move(to:.zero,duration:0.025)]
+        }
+        environment.run(.sequence(shakes + [.move(to:.zero,duration:0.01)]))
+    }
+    private func updateAttitude() {
+        attitude.removeAllChildren()
+        let radius: CGFloat = 52
+        let rim = SKShapeNode(circleOfRadius:radius)
+        rim.fillColor = .black.withAlphaComponent(0.7)
+        rim.strokeColor = .cyan.withAlphaComponent(0.5)
+        rim.lineWidth = 2
+        attitude.addChild(rim)
+        let mask = SKCropNode()
+        let aperture = SKShapeNode(circleOfRadius:radius-3)
+        aperture.fillColor = .white
+        mask.maskNode = aperture
+        attitude.addChild(mask)
+        let horizon = SKNode()
+        horizon.zRotation = -bankAngle
+        horizon.position.y = CGFloat(climbRate/21)
+        let sky = SKShapeNode(rectOf:CGSize(width:150,height:110))
+        sky.position.y = 55
+        sky.fillColor = SKColor(red:0.23,green:0.45,blue:0.69,alpha:1)
+        sky.strokeColor = .clear
+        horizon.addChild(sky)
+        let ground = SKShapeNode(rectOf:CGSize(width:150,height:110))
+        ground.position.y = -55
+        ground.fillColor = SKColor(red:0.55,green:0.37,blue:0.20,alpha:1)
+        ground.strokeColor = .clear
+        horizon.addChild(ground)
+        let line = SKShapeNode(rectOf:CGSize(width:150,height:2))
+        line.fillColor = .white
+        line.strokeColor = .clear
+        horizon.addChild(line)
+        mask.addChild(horizon)
+        let level = SKShapeNode(rectOf:CGSize(width:59,height:3))
+        level.fillColor = .orange
+        level.strokeColor = .clear
+        attitude.addChild(level)
+        let slip = SKShapeNode(circleOfRadius:3)
+        slip.position = CGPoint(x:bankAngle * 30,y:-39)
+        slip.fillColor = .orange
+        slip.strokeColor = .clear
+        attitude.addChild(slip)
+        let label = SKLabelNode(fontNamed:"Menlo-Bold")
+        label.text = "ATTITUDE / BANK"
+        label.fontSize = 10
+        label.fontColor = .cyan
+        label.position = CGPoint(x:0,y:61)
+        attitude.addChild(label)
+    }
+
     private func installTelemetry() {
         hud.fontSize = 12
         hud.fontColor = .white.withAlphaComponent(0.82)
-        telemetryPanel.fillColor = .black.withAlphaComponent(0.31)
+        telemetryPanel.fillColor = .black.withAlphaComponent(CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.35))
         telemetryPanel.strokeColor = .cyan.withAlphaComponent(0.32)
         telemetryPanel.lineWidth = 1
         telemetryPanel.zPosition = 90
@@ -1171,13 +1309,19 @@ private final class AirBattleScene: SKScene {
             label.zPosition = 92
             addChild(label)
         }
-        radarPanel.fillColor = .black.withAlphaComponent(0.33)
+        radarPanel.fillColor = .black.withAlphaComponent(CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.35))
         radarPanel.strokeColor = .cyan.withAlphaComponent(0.4)
         radarPanel.lineWidth = 1
         radarPanel.zPosition = 91
         addChild(radarPanel)
         radarContacts.zPosition = 93
         addChild(radarContacts)
+        attitudePanel.fillColor = .black.withAlphaComponent(0.38)
+        attitudePanel.strokeColor = .cyan.withAlphaComponent(0.35)
+        attitudePanel.zPosition = 90
+        addChild(attitudePanel)
+        attitude.zPosition = 94
+        addChild(attitude)
         layoutTelemetry()
     }
     private func layoutTelemetry() {
@@ -1191,11 +1335,17 @@ private final class AirBattleScene: SKScene {
         for (i, label) in telemetryLines.enumerated() {
             label.position = CGPoint(x: panel.minX + 13, y: panel.maxY - 18 - CGFloat(i) * 25)
         }
+        let attitudeRect = CGRect(x: right - panelWidth, y: 249, width: panelWidth, height: 154)
+        attitudePanel.path = CGPath(roundedRect: attitudeRect, cornerWidth: 10, cornerHeight: 10, transform: nil)
+        attitude.position = CGPoint(x: attitudeRect.midX, y: attitudeRect.midY)
         let radarFrame = CGRect(x: right - panelWidth, y: 19, width: panelWidth, height: 222)
         radarPanel.path = CGPath(roundedRect: radarFrame, cornerWidth: 10, cornerHeight: 10, transform: nil)
         radarContacts.position = CGPoint(x: radarFrame.midX, y: radarFrame.midY - 5)
     }
     private func updateRadar() {
+        if gameTime - lastRadarRender < 0.045 { return }
+        lastRadarRender = gameTime
+        updateAttitude()
         radarContacts.removeAllChildren()
         let radius: CGFloat = 89
         for fraction in [CGFloat(0.33), 0.66, 1] {
@@ -1217,6 +1367,17 @@ private final class AirBattleScene: SKScene {
         center.fillColor = .cyan
         center.strokeColor = .clear
         radarContacts.addChild(center)
+        let sweepColor = SKColor.cyan.withAlphaComponent(CGFloat(prefs.object(forKey: "aces.radarBrightness") as? Double ?? 0.75))
+        for i in 0..<13 {
+            let angle = radarSweep - CGFloat(i) * 0.038
+            let p = CGMutablePath()
+            p.move(to: .zero)
+            p.addLine(to: CGPoint(x: cos(angle) * radius, y: sin(angle) * radius))
+            let ray = SKShapeNode(path: p)
+            ray.strokeColor = sweepColor.withAlphaComponent(CGFloat(13-i)/13 * 0.52)
+            ray.lineWidth = i == 0 ? 2.4 : 1.2
+            radarContacts.addChild(ray)
+        }
         for bandit in bandits {
             let dx = bandit.position.x - player.position.x
             let dy = bandit.position.y - player.position.y
@@ -1246,9 +1407,9 @@ private final class AirBattleScene: SKScene {
             fighter.rawValue.uppercased(),
             String(format: "AIRSPEED  %03d MPH", Int(airspeed)),
             String(format: "HEADING   %03d DEG", Int((90 - heading * 180 / .pi).truncatingRemainder(dividingBy: 360) + 360) % 360),
-            "AIRFRAME  \(max(0, health))/\(fighter.health)",
-            "WAVE \(wave)   KILLS \(kills)",
-            "SCORE  \(score)"
+            "ALT  \(Int(altitude)) FT  AIRFRAME \(max(0, health))/\(fighter.health)",
+            "AMMO \(prefs.bool(forKey: "aces.unlimitedAmmo") ? "∞" : String(ammo))  WAVE \(wave)",
+            "KILLS \(kills)    SCORE \(score)"
         ]
         for (index, label) in telemetryLines.enumerated() { label.text = rows[index] }
         updateRadar()
@@ -1266,6 +1427,14 @@ private final class AirBattleScene: SKScene {
         threat.text = ""
         lastFire = -1
         health = fighter.health
+        deathStarted = false
+        player.removeAllActions()
+        player.setScale(0.9)
+        player.alpha = 1
+        ammo = fighter.ammunition
+        altitude = 7600
+        climbRate = 0
+        bankAngle = 0
         gunCycle = 0
         score = 0
         kills = 0
