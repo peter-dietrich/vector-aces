@@ -20,3 +20,9 @@ open VectorAces.xcodeproj
 GitHub feature branch: `feature/vector-aces-initial`. This early prototype has procedural silhouettes rather than final historically detailed models. Historically distinctive German aircraft artwork, sound design, mission variety, advanced telemetry and release packaging are subsequent development phases. The companion Fun City feature branch adds the built-in cabinet; install the built app locally and use LOCATE GAME.
 
 No third-party artwork, trademarks as game artwork, audio recordings, or unlicensed assets have been incorporated. The game is intended as original arcade software inspired by WWII aviation history.
+
+## Combat AI pass (development branch)
+
+Enemy formations now use V, echelon, and paired-flight layouts. After formation flight, fighters intercept the player's path, line up shots, break away and regroup for additional attacks. Fw 190s and Bf 109s have different turn rates; Ju 87s remain slower and less maneuverable. A six-o'clock warning shows nearby rear threats. Multiple kills in quick succession earn combo bonuses. Aircraft silhouettes have extra visual detail, and destruction effects are larger.
+
+This is unverified source until compiled and play-tested locally on macOS. Historical appearance, detailed sound design and full missions remain work to be done.
