@@ -41,3 +41,13 @@ This is unverified source until compiled and play-tested locally on macOS. Histo
 The earlier four repeated terrain textures have been replaced by a 3×3 streamed tile neighborhood. Tile keys are absolute world coordinates, so each tile uses unique world-sampled multiscale noise, field parcel colors, forests, roads, riverbeds, gravel verges, rural buildings and microtextures. Tiles are recreated deterministically when revisited, and tiles far outside the camera are discarded to control memory. The game continues to run without internet. This is generated aerial-style terrain **not actual satellite photographs**. Clouds, aircraft and controls were not intentionally changed in this pass.
 
 **Testing note:** Texture creation is currently CPU-heavy and synchronous. Test macOS launch and sustained traversal for loading stutter and seams. True photographic imagery still requires separately cleared imagery data. The world coordinate fields are deterministic but do not correspond to a real geographic location.
+
+## Geographically coherent terrain and HUD pass
+
+- Corrects north/south raster row orientation so world-coordinate roads and rivers connect across texture tile boundaries.
+- Replaces arbitrary isolated river/road patterns with a continuous winding main channel, a tributary, a river-parallel road, periodic crossing roads and explicit bridge crossings.
+- Rural hamlets are now placed near dry-land road junctions with surrounding agricultural clearings rather than everywhere a road grid crosses.
+- All scenery is still deterministic **procedural terrain**, not literal satellite photography.
+- Fire origins now depend on aircraft: paired wing guns for P-51, P-47 and P-40; concentrated nose fire for P-38. Simplified arcade bursts represent historically inspired installations rather than a simulation of every individual barrel.
+- Moves the compact translucent flight readout to the upper-right and adds a heading-up proximity radar to the lower-right. The six-o'clock alert sits below the telemetry.
+- No additional flight-control keys. Xcode compile, screenshot validation and sustained frame-rate tests are still required.
