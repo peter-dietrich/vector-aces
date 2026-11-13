@@ -116,6 +116,9 @@ private final class AirBattleScene: SKScene {
     private var rounds: [Round] = []
     private var effects: [SKNode] = []
     private var environment = SKNode()
+    private var terrainTiles: [SKSpriteNode] = []
+    private var cloudClusters: [SKNode] = []
+    private var terrainOffset = CGPoint.zero
     private var lastTime: TimeInterval = 0
     private var gameTime: CGFloat = 0
     private var lastFire: CGFloat = -1
@@ -174,7 +177,7 @@ private final class AirBattleScene: SKScene {
         hud.position = CGPoint(x: 24, y: size.height - 22)
         status.position = CGPoint(x: size.width / 2, y: size.height / 2 + 80)
         threat.position = CGPoint(x: size.width - 25, y: size.height - 50)
-        player.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        if player.position == .zero { player.position = CGPoint(x: size.width / 2, y: size.height / 2) }
     }
     override func keyDown(with event: NSEvent) {
         keys.insert(event.keyCode)
@@ -336,15 +339,36 @@ private final class AirBattleScene: SKScene {
         airspeed = max(105, min(fighter.speed + 95, airspeed))
         player.zRotation = heading - .pi / 2
         let velocity = CGVector(dx: cos(heading) * airspeed, dy: sin(heading) * airspeed)
-        let scroll = CGVector(dx: -velocity.dx * dt, dy: -velocity.dy * dt)
-        // Keep player centered and advance the world relative to its flight vector.
+        // Free flight with a generous camera dead-zone. The aircraft crosses the
+        // screen naturally, and only then does the camera pan to follow it.
+        let next = CGPoint(x: player.position.x + velocity.dx * dt,
+                           y: player.position.y + velocity.dy * dt)
+        let marginX = size.width * 0.22
+        let marginY = size.height * 0.24
+        let cameraX = max(0, next.x - (size.width - marginX)) + min(0, next.x - marginX)
+        let cameraY = max(0, next.y - (size.height - marginY)) + min(0, next.y - marginY)
+        let scroll = CGVector(dx: -cameraX, dy: -cameraY)
+        player.position = CGPoint(x: next.x + scroll.dx, y: next.y + scroll.dy)
+        // Every world object receives the same camera displacement.
         for node in environment.children {
-            node.position.x += scroll.dx * (node.name == "cloud" ? 0.58 : 1)
-            node.position.y += scroll.dy * (node.name == "cloud" ? 0.58 : 1)
-            if node.position.x < -230 { node.position.x += size.width + 430 }
-            if node.position.x > size.width + 230 { node.position.x -= size.width + 430 }
-            if node.position.y < -190 { node.position.y += size.height + 380 }
-            if node.position.y > size.height + 190 { node.position.y -= size.height + 380 }
+            let parallax: CGFloat = node.name == "cloud" ? 0.77 : 1
+            node.position.x += scroll.dx * parallax
+            node.position.y += scroll.dy * parallax
+            if node.name == "terrain" {
+                let strideX: CGFloat = 1536
+                let strideY: CGFloat = 1536
+                while node.position.x < -strideX * 0.55 { node.position.x += strideX * 3 }
+                while node.position.x > size.width + strideX * 1.4 { node.position.x -= strideX * 3 }
+                while node.position.y < -strideY * 0.55 { node.position.y += strideY * 3 }
+                while node.position.y > size.height + strideY * 1.4 { node.position.y -= strideY * 3 }
+            } else if node.name == "cloud" {
+                let wind: CGFloat = 8 * dt
+                node.position.x += wind
+                if node.position.x < -460 { node.position.x += size.width + 980 }
+                if node.position.x > size.width + 480 { node.position.x -= size.width + 980 }
+                if node.position.y < -330 { node.position.y += size.height + 640 }
+                if node.position.y > size.height + 330 { node.position.y -= size.height + 640 }
+            }
         }
         if keys.contains(49) && gameTime - lastFire > 0.11 {
             fire(from: player.position, angle: heading, hostile: false)
@@ -614,6 +638,7 @@ private final class AirBattleScene: SKScene {
         wave = 1
         airspeed = 210
         heading = .pi / 2
+        player.position = CGPoint(x: size.width / 2, y: size.height / 2)
         keys.removeAll()
         gameOver = false
         pausedGame = false
