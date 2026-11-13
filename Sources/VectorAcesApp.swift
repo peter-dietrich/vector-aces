@@ -19,70 +19,301 @@ enum Fighter: String, CaseIterable, Identifiable {
     }
 }
 
+extension Fighter {
+    var role: String {
+        switch self {
+        case .mustang: return "LONG-RANGE ESCORT FIGHTER"
+        case .thunderbolt: return "HEAVY GUNFIGHTER"
+        case .lightning: return "TWIN-ENGINE INTERCEPTOR"
+        case .warhawk: return "AGILE PURSUIT FIGHTER"
+        }
+    }
+    var catalogDescription: String {
+        switch self {
+        case .mustang: return "The Mustang is a versatile escort fighter with tremendous speed and excellent high-altitude performance. A balanced choice for turning engagements, pursuit and sustained combat."
+        case .thunderbolt: return "The Thunderbolt brings a rugged radial engine, formidable eight-gun armament and exceptional durability. Best used in powerful attack runs and extended firing passes."
+        case .lightning: return "The Lightning's distinctive twin booms, twin engines and tightly grouped nose guns make it a stable long-range interceptor with devastating concentrated fire."
+        case .warhawk: return "The Warhawk offers responsive handling and a direct, aggressive fighting style. Its rugged construction and wing-mounted guns favor close-range engagements."
+        }
+    }
+    var armament: String {
+        switch self {
+        case .mustang: return "6 × .50 CAL WING MACHINE GUNS"
+        case .thunderbolt: return "8 × .50 CAL WING MACHINE GUNS"
+        case .lightning: return "1 × 20 MM CANNON + 4 × .50 CAL NOSE GUNS"
+        case .warhawk: return "6 × .50 CAL WING MACHINE GUNS"
+        }
+    }
+    var stats: [(String, Int)] {
+        switch self {
+        case .mustang: return [("SPEED",9),("ACCELERATION",8),("TURN",8),("CLIMB",8),("DURABILITY",6),("FIREPOWER",7),("AMMO",7)]
+        case .thunderbolt: return [("SPEED",7),("ACCELERATION",6),("TURN",5),("CLIMB",6),("DURABILITY",10),("FIREPOWER",9),("AMMO",10)]
+        case .lightning: return [("SPEED",8),("ACCELERATION",7),("TURN",7),("CLIMB",7),("DURABILITY",7),("FIREPOWER",9),("AMMO",8)]
+        case .warhawk: return [("SPEED",7),("ACCELERATION",7),("TURN",8),("CLIMB",6),("DURABILITY",5),("FIREPOWER",7),("AMMO",6)]
+        }
+    }
+    var ammunition: Int {
+        switch self {
+        case .mustang: return 1800
+        case .thunderbolt: return 2720
+        case .lightning: return 1100
+        case .warhawk: return 1400
+        }
+    }
+}
+private enum AcesStyle {
+    static let ice = Color(red: 0.5, green: 0.88, blue: 0.98)
+    static let amber = Color(red: 1, green: 0.72, blue: 0.37)
+    static let panel = Color(red: 0.065, green: 0.115, blue: 0.17)
+}
+private struct FighterIllustration: View {
+    var fighter: Fighter
+    var body: some View {
+        Canvas { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let unit = min(size.width / 175, size.height / 170)
+            // High contrast overhead technical illustration, drawn from
+            // original paths rather than unlicensed historical imagery.
+            var outline = Path()
+            let wing = fighter == .lightning ? 72.0 : fighter == .thunderbolt ? 67.0 : 59.0
+            let pts: [CGPoint] = [
+                .init(x:-7,y:75),.init(x:-11,y:38),
+                .init(x:-wing*0.85,y:13),.init(x:-wing,y:4),
+                .init(x:-wing,y:-9),.init(x:-13,y:-23),
+                .init(x:-9,y:-65),.init(x:-4,y:-80),
+                .init(x:4,y:-80),.init(x:9,y:-65),
+                .init(x:13,y:-23),.init(x:wing,y:-9),
+                .init(x:wing,y:4),.init(x:wing*0.85,y:13),
+                .init(x:11,y:38),.init(x:7,y:75),.init(x:0,y:86)
+            ]
+            for (i,p) in pts.enumerated() {
+                let q = CGPoint(x:center.x+p.x*unit,y:center.y-p.y*unit)
+                if i == 0 { outline.move(to:q) } else { outline.addLine(to:q) }
+            }
+            outline.closeSubpath()
+            context.fill(outline, with: .color(Color(red: 0.54, green: 0.69, blue: 0.7).opacity(0.93)))
+            context.stroke(outline, with: .color(AcesStyle.ice), lineWidth: 2)
+            for side in [-1.0,1.0] {
+                let x = center.x + side * wing * 0.63 * unit
+                let circle = Path(ellipseIn:CGRect(x:x-9*unit,y:center.y-9*unit,width:18*unit,height:18*unit))
+                context.fill(circle, with:.color(.white.opacity(0.94)))
+                context.stroke(circle, with:.color(.blue), lineWidth:3)
+                if fighter == .lightning {
+                    let boom = CGRect(x:center.x+side*30*unit-4*unit,y:center.y-45*unit,width:8*unit,height:98*unit)
+                    context.fill(Path(roundedRect:boom,cornerRadius:3),with:.color(Color(red:0.36,green:0.53,blue:0.59)))
+                    context.stroke(Path(roundedRect:boom,cornerRadius:3),with:.color(AcesStyle.ice),lineWidth:1.2)
+                }
+            }
+            let canopy = Path(ellipseIn:CGRect(x:center.x-8*unit,y:center.y-36*unit,width:16*unit,height:32*unit))
+            context.fill(canopy, with:.color(Color(red:0.10,green:0.24,blue:0.37)))
+            context.stroke(canopy, with:.color(AcesStyle.ice),lineWidth:1.8)
+            let tail = CGRect(x:center.x-25*unit,y:center.y+61*unit,width:50*unit,height:5*unit)
+            context.fill(Path(tail),with:.color(AcesStyle.ice.opacity(0.7)))
+            for delta in [-0.42,0.42] {
+                var line = Path()
+                line.move(to:CGPoint(x:center.x+delta*wing*unit,y:center.y-10*unit))
+                line.addLine(to:CGPoint(x:center.x+delta*wing*unit,y:center.y+12*unit))
+                context.stroke(line,with:.color(.black.opacity(0.4)),lineWidth:1)
+            }
+            context.draw(Text("TOP VIEW / SCHEMATIC").font(.system(size:11,weight:.medium,design:.monospaced)).foregroundColor(AcesStyle.ice.opacity(0.65)),at:CGPoint(x:105,y:15))
+        }
+        .background {
+            GeometryReader { geometry in
+                Path { p in
+                    for x in stride(from:CGFloat(0),through:geometry.size.width,by:30) {
+                        p.move(to:CGPoint(x:x,y:0));p.addLine(to:CGPoint(x:x,y:geometry.size.height))
+                    }
+                    for y in stride(from:CGFloat(0),through:geometry.size.height,by:30) {
+                        p.move(to:CGPoint(x:0,y:y));p.addLine(to:CGPoint(x:geometry.size.width,y:y))
+                    }
+                }.stroke(AcesStyle.ice.opacity(0.07),lineWidth:0.7)
+            }
+        }
+    }
+}
+private struct AcesSettings: View {
+    @AppStorage("aces.effectsVolume") private var effectsVolume = 0.7
+    @AppStorage("aces.musicVolume") private var musicVolume = 0.35
+    @AppStorage("aces.telemetryOpacity") private var telemetryOpacity = 0.35
+    @AppStorage("aces.radarBrightness") private var radarBrightness = 0.75
+    @AppStorage("aces.screenShake") private var screenShake = 0.7
+    @AppStorage("aces.difficulty") private var difficulty = 1
+    @AppStorage("aces.enemyDensity") private var enemyDensity = 1.0
+    @AppStorage("aces.cloudDensity") private var cloudDensity = 1.0
+    @AppStorage("aces.startWave") private var startWave = 1
+    @AppStorage("aces.unlimitedAmmo") private var unlimitedAmmo = false
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        Form {
+            Section("COMBAT") {
+                Picker("Difficulty", selection:$difficulty) {
+                    Text("Rookie").tag(0);Text("Veteran").tag(1);Text("Ace").tag(2)
+                }
+                .pickerStyle(.segmented)
+                HStack { Text("Enemy density"); Slider(value:$enemyDensity,in:0.6...1.6) }
+                Stepper("Starting wave: \(startWave)",value:$startWave,in:1...10)
+                Toggle("Unlimited ammunition",isOn:$unlimitedAmmo)
+            }
+            Section("DISPLAY") {
+                HStack { Text("Telemetry opacity"); Slider(value:$telemetryOpacity,in:0.12...0.85) }
+                HStack { Text("Radar brightness"); Slider(value:$radarBrightness,in:0.3...1) }
+                HStack { Text("Cloud density"); Slider(value:$cloudDensity,in:0.3...1.5) }
+                HStack { Text("Screen shake"); Slider(value:$screenShake,in:0...1) }
+            }
+            Section("AUDIO") {
+                HStack { Text("Effects volume"); Slider(value:$effectsVolume,in:0...1) }
+                HStack { Text("Music volume (reserved)"); Slider(value:$musicVolume,in:0...1) }
+            }
+            Button("DONE") { dismiss() }.frame(maxWidth:.infinity)
+        }
+        .formStyle(.grouped)
+        .frame(minWidth:540,minHeight:560)
+    }
+}
 @main struct VectorAcesApp: App {
-    @State private var fighter: Fighter = .mustang
+    @AppStorage("aces.selectedFighter") private var selectedFighter = Fighter.mustang.rawValue
     @State private var started = false
+    @State private var showingSettings = false
+    private var fighter: Fighter { Fighter(rawValue:selectedFighter) ?? .mustang }
     var body: some Scene {
         WindowGroup("Vector Aces") {
             ZStack {
-                Color(red: 0.045, green: 0.065, blue: 0.12).ignoresSafeArea()
+                Color(red:0.025,green:0.045,blue:0.077).ignoresSafeArea()
                 if started {
-                    GameSurface(fighter: fighter)
+                    GameSurface(fighter:fighter)
                         .id(fighter)
-                        .overlay(alignment: .topTrailing) {
+                        .overlay(alignment:.topTrailing) {
                             Button("HANGAR") { started = false }
-                                .keyboardShortcut(.escape, modifiers: [])
+                                .keyboardShortcut(.escape,modifiers:[])
                                 .padding(14)
                         }
                 } else {
-                    VStack(spacing: 22) {
-                        Text("FUN CITY  /  VECTOR SERIES").font(.system(size: 12, weight: .bold, design: .monospaced)).tracking(3).foregroundStyle(.orange)
-                        Text("VECTOR ACES").font(.system(size: 58, weight: .black, design: .rounded)).tracking(3)
-                        Text("WWII AIR COMBAT").font(.system(size: 17, weight: .bold, design: .monospaced)).tracking(5).foregroundStyle(.cyan)
-                        Text("SELECT YOUR FIGHTER").font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(.gray)
-                        ForEach(Fighter.allCases) { choice in
-                            Button {
-                                fighter = choice
-                            } label: {
-                                HStack {
-                                    Text(choice.rawValue)
-                                    Spacer()
-                                    if choice == fighter { Image(systemName: "checkmark.circle.fill") }
+                    ScrollView {
+                        VStack(alignment:.leading,spacing:22) {
+                            HStack {
+                                VStack(alignment:.leading,spacing:5) {
+                                    Text("FUN CITY  /  VECTOR SERIES  /  HANGAR")
+                                        .font(.system(size:11,weight:.bold,design:.monospaced))
+                                        .tracking(2).foregroundStyle(AcesStyle.ice)
+                                    Text("VECTOR ACES")
+                                        .font(.system(size:42,weight:.black,design:.rounded))
+                                    Text("WORLD WAR II  •  AIRCRAFT CATALOG")
+                                        .font(.system(size:12,weight:.medium,design:.monospaced))
+                                        .tracking(3).foregroundStyle(AcesStyle.amber)
                                 }
-                                .font(.system(size: 18, weight: .semibold, design: .monospaced))
-                                .padding(15).frame(width: 430)
-                                .background(choice == fighter ? Color.cyan.opacity(0.23) : Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
-                            }.buttonStyle(.plain)
+                                Spacer()
+                                Button("CUSTOM SETTINGS") { showingSettings = true }
+                                    .buttonStyle(.bordered).tint(AcesStyle.ice)
+                            }
+                            HStack(alignment:.top,spacing:18) {
+                                VStack(alignment:.leading,spacing:13) {
+                                    Text("SELECT AIRCRAFT").font(.system(size:12,weight:.bold,design:.monospaced))
+                                        .tracking(2).foregroundStyle(AcesStyle.ice)
+                                    ForEach(Fighter.allCases) { choice in
+                                        Button { selectedFighter = choice.rawValue } label: {
+                                            VStack(alignment:.leading,spacing:7) {
+                                                HStack {
+                                                    Text(choice.rawValue.uppercased())
+                                                        .font(.system(size:15,weight:.bold,design:.monospaced))
+                                                    Spacer()
+                                                    if choice == fighter { Image(systemName:"checkmark.circle.fill") }
+                                                }
+                                                Text(choice.role).font(.system(size:9,design:.monospaced))
+                                                    .foregroundStyle(.white.opacity(0.58))
+                                            }
+                                            .padding(15)
+                                            .frame(maxWidth:.infinity,alignment:.leading)
+                                            .background(choice == fighter ? AcesStyle.ice.opacity(0.19) : .white.opacity(0.055),
+                                                        in:RoundedRectangle(cornerRadius:8))
+                                            .overlay(RoundedRectangle(cornerRadius:8).stroke(choice == fighter ? AcesStyle.ice : .white.opacity(0.08)))
+                                        }.buttonStyle(.plain)
+                                    }
+                                    Spacer(minLength:12)
+                                    Button("START SORTIE") { started = true }
+                                        .font(.system(size:17,weight:.black,design:.monospaced))
+                                        .frame(maxWidth:.infinity).padding(14)
+                                        .background(AcesStyle.amber,in:RoundedRectangle(cornerRadius:8))
+                                        .foregroundStyle(.black)
+                                    Text("← → TURN  •  ↑ ↓ SPEED  •  Q/E ALTITUDE\nSPACE FIRE  •  P PAUSE  •  RETURN RESTART")
+                                        .font(.system(size:10,design:.monospaced))
+                                        .foregroundStyle(.white.opacity(0.55))
+                                        .fixedSize(horizontal:false,vertical:true)
+                                }
+                                .padding(18)
+                                .frame(width:330,minHeight:570)
+                                .background(AcesStyle.panel,in:RoundedRectangle(cornerRadius:14))
+                                VStack(alignment:.leading,spacing:12) {
+                                    HStack {
+                                        VStack(alignment:.leading,spacing:4) {
+                                            Text(fighter.rawValue.uppercased())
+                                                .font(.system(size:24,weight:.black,design:.monospaced))
+                                            Text(fighter.role)
+                                                .font(.system(size:11,weight:.semibold,design:.monospaced))
+                                                .foregroundStyle(AcesStyle.amber)
+                                        }
+                                        Spacer()
+                                        Text("AIRCRAFT FILE  /  1940s")
+                                            .font(.system(size:10,design:.monospaced))
+                                            .foregroundStyle(AcesStyle.ice.opacity(0.7))
+                                    }
+                                    FighterIllustration(fighter:fighter)
+                                        .frame(height:226)
+                                        .background(.black.opacity(0.18),in:RoundedRectangle(cornerRadius:8))
+                                    LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:10) {
+                                        ForEach(fighter.stats,id:\.0) { stat in
+                                            VStack(alignment:.leading,spacing:5) {
+                                                HStack {
+                                                    Text(stat.0).font(.system(size:10,weight:.bold,design:.monospaced))
+                                                    Spacer()
+                                                    Text("\(stat.1)/10").font(.system(size:10,design:.monospaced))
+                                                }.foregroundStyle(.white.opacity(0.85))
+                                                GeometryReader { geo in
+                                                    ZStack(alignment:.leading) {
+                                                        Capsule().fill(.white.opacity(0.08))
+                                                        Capsule().fill(AcesStyle.ice)
+                                                            .frame(width:geo.size.width * CGFloat(stat.1) / 10)
+                                                    }
+                                                }.frame(height:5)
+                                            }
+                                        }
+                                    }
+                                    Text(fighter.catalogDescription)
+                                        .font(.system(size:13))
+                                        .foregroundStyle(.white.opacity(0.78))
+                                        .fixedSize(horizontal:false,vertical:true)
+                                    Text("ARMAMENT  /  \(fighter.armament)")
+                                        .font(.system(size:10,weight:.bold,design:.monospaced))
+                                        .foregroundStyle(AcesStyle.amber)
+                                }
+                                .padding(20)
+                                .frame(maxWidth:.infinity,alignment:.leading)
+                                .background(AcesStyle.panel,in:RoundedRectangle(cornerRadius:14))
+                            }
                         }
-                        Button("START SORTIE  ↗") { started = true }
-                            .font(.system(size: 19, weight: .black, design: .monospaced))
-                            .padding(.horizontal, 44).padding(.vertical, 16)
-                            .background(.orange, in: RoundedRectangle(cornerRadius: 10))
-                            .foregroundStyle(.black)
-                        Text("←/→ TURN   ↑ THRUST   ↓ BRAKE   SPACE FIRE   P PAUSE   RETURN RESTART")
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(.gray)
-                    }.padding(25)
+                        .padding(25)
+                        .frame(maxWidth:1280)
+                        .frame(maxWidth:.infinity)
+                    }
                 }
             }
             .preferredColorScheme(.dark)
-            .frame(minWidth: 900, minHeight: 620)
+            .frame(minWidth:1000,minHeight:670)
+            .sheet(isPresented:$showingSettings) { AcesSettings() }
         }
-        .defaultSize(width: 1240, height: 760)
+        .defaultSize(width:1250,height:820)
     }
 }
-
 private struct GameSurface: NSViewRepresentable {
     let fighter: Fighter
     func makeNSView(context: Context) -> SKView {
         let view = SKView()
         view.ignoresSiblingOrder = true
-        view.presentScene(AirBattleScene(size: CGSize(width: 1200, height: 720), fighter: fighter))
+        view.presentScene(AirBattleScene(size:CGSize(width:1200,height:720),fighter:fighter))
         DispatchQueue.main.async { view.window?.makeFirstResponder(view.scene) }
         return view
     }
-    func updateNSView(_ nsView: SKView, context: Context) {}
+    func updateNSView(_ nsView: SKView,context: Context) {}
 }
-
 
 private final class AirBattleScene: SKScene {
     private enum Tactic { case formation, intercept, attack, breakAway, regroup }
