@@ -456,69 +456,108 @@ private final class AirBattleScene: SKScene {
         for py in 0..<n {
             for px in 0..<n {
                 let x = originX + Double(px) * 2
-                let y = originY + Double(py) * 2
-                let regional = terrainNoise(x, y, 2400, 3)
-                let ridge = terrainNoise(x, y, 680, 7)
-                let foliage = terrainNoise(x, y, 190, 11)
-                let thicket = terrainNoise(x, y, 49, 13)
-                let grit = terrainNoise(x, y, 9, 17)
+                // NSBitmapImageRep's first row is the TOP; SpriteKit's scene
+                // coordinates increase UP. Flip sample Y to keep adjacent
+                // north/south tiles geographically seamless.
+                let y = originY + Double(n - 1 - py) * 2
+                let regional = terrainNoise(x, y, 2800, 3)
+                let ridge = terrainNoise(x, y, 670, 7)
+                let foliage = terrainNoise(x, y, 165, 11)
+                let thicket = terrainNoise(x, y, 47, 13)
+                let grit = terrainNoise(x, y, 8, 17)
                 let flecks = terrainHash(Int(x), Int(y), 23)
-                let vegetation = 0.32 * regional + 0.27 * ridge +
-                                 0.26 * foliage + 0.13 * thicket + 0.02 * grit
-                let villageRegionX = Int(floor(x / 1800))
-                let villageRegionY = Int(floor(y / 1800))
-                let farmland = terrainHash(villageRegionX, villageRegionY, 33) > 0.35
-                let parcelX = Int(floor((x + sin(y / 420) * 140) / 210))
-                let parcelY = Int(floor((y + cos(x / 390) * 110) / 155))
-                let parcel = terrainHash(parcelX, parcelY, 31)
-                let band = 0.82 + 0.2 * terrainNoise(x, y, 31, 41)
-                let woodland = vegetation > (farmland ? 0.52 : 0.43)
-                // Rivers continue globally across tiles; narrow winding side streams vary.
+                let vegetation = 0.32 * regional + 0.28 * ridge +
+                                 0.24 * foliage + 0.14 * thicket + 0.02 * grit
+
+                // A WORLD-SPACE RIVER: one smoothly winding continuous channel.
+                // Small streams converge toward its floodplain.
                 let river = 750 + sin(y / 525) * 350 + sin(y / 163) * 85 +
                             sin(y / 59) * 19
                 let waterDist = abs(x - river)
-                let tributary = 1850 + cos(y / 700 + 1.7) * 290 +
-                                sin(y / 127) * 58
+                let tributary = river + 510 + sin(y / 320 + 1.7) * 72
                 let tributaryDist = abs(x - tributary)
-                // Gravel routes snake through fields; road junctions create hamlets.
-                let roadV = Double(Int(floor((x + sin(y / 600) * 65) / 1050))) * 1050 +
-                            520 - sin(y / 600) * 65
-                let roadH = Double(Int(floor((y + sin(x / 490) * 52) / 1250))) * 1250 +
-                            630 - sin(x / 490) * 52
-                let roadDistance = min(abs(x - roadV), abs(y - roadH))
-                let roadJunction = abs(x - roadV) < 95 && abs(y - roadH) < 115
-                let houseX = Int(floor(x / 23))
-                let houseY = Int(floor(y / 22))
-                let roof = roadJunction && terrainHash(houseX, houseY, 99) > 0.73 &&
-                           abs((x.truncatingRemainder(dividingBy: 23)) - 11.5) < 8 &&
-                           abs((y.truncatingRemainder(dividingBy: 22)) - 11) < 6
+                let channel = waterDist < 17 || (tributaryDist < 6 && y.truncatingRemainder(dividingBy: 2100) > 760)
+                let floodplain = waterDist < 75 || tributaryDist < 22
+
+                // One road follows the high, dry east bank. Periodic crossing
+                // roads connect it to farms and villages, using an explicit
+                // bridge at the river rather than terminating at the water.
+                let roadX = river + 122 + sin(y / 360) * 13
+                let northRoadDistance = abs(x - roadX)
+                let crossingIndex = Int(floor((y - 470) / 1450))
+                let crossingY = Double(crossingIndex) * 1450 + 470 +
+                                sin(x / 370) * 21
+                let nextCrossingY = Double(crossingIndex + 1) * 1450 + 470 +
+                                    sin(x / 370) * 21
+                let crossDistance = min(abs(y - crossingY), abs(y - nextCrossingY))
+                let bridge = crossDistance < 7 && waterDist < 24
+                let roadDistance = min(northRoadDistance, crossDistance)
+                // Road shoulders appear on dry land; only an explicit bridge
+                // is allowed to overwrite river water.
+                let gravelRoad = roadDistance < 5 && (!channel || bridge)
+
+                // Settlements emerge beside road junctions, not at random
+                // intersections in a repeating grid.
+                let hamletY = Double(Int(floor((y - 470) / 1450 + 0.5))) * 1450 + 470
+                let hamletRiver = 750 + sin(hamletY / 525) * 350 +
+                                  sin(hamletY / 163) * 85 + sin(hamletY / 59) * 19
+                let hamletX = hamletRiver + 145 + sin(hamletY / 360) * 13
+                let villageDistance = hypot((x - hamletX) / 150,
+                                            (y - hamletY) / 135)
+                let settlement = villageDistance < 1.0 &&
+                                 !floodplain && roadDistance < 155
+                let lotX = Int(floor((x - hamletX) / 25))
+                let lotY = Int(floor((y - hamletY) / 30))
+                let roof = settlement && terrainHash(lotX, lotY, 99) > 0.53 &&
+                           abs(x - (hamletX + Double(lotX) * 25 + 12)) < 7 &&
+                           abs(y - (hamletY + Double(lotY) * 30 + 12)) < 9 &&
+                           roadDistance > 12
+
+                // Agricultural parcels surround settlements and roads, while
+                // woods occupy more uneven land beyond their cleared margins.
+                let cultivated = villageDistance < 4.4 ||
+                                 northRoadDistance < 360 ||
+                                 crossDistance < 270
+                let parcelX = Int(floor((x + sin(y / 420) * 74) / 220))
+                let parcelY = Int(floor((y + cos(x / 390) * 60) / 170))
+                let parcel = terrainHash(parcelX, parcelY, 31)
+                let fieldBand = 0.83 + 0.17 * terrainNoise(x, y, 35, 41)
+                let woodland = vegetation > (cultivated ? 0.58 : 0.43)
                 var red: Double
                 var green: Double
                 var blue: Double
-                if waterDist < 15 || tributaryDist < 7 {
+                if bridge {
+                    red = 147 + grit * 16
+                    green = 137 + grit * 12
+                    blue = 112 + grit * 14
+                } else if channel {
                     red = 39 + ridge * 21
                     green = 74 + ridge * 32
                     blue = 83 + foliage * 29
-                } else if waterDist < 30 || tributaryDist < 17 {
-                    red = 112 + ridge * 32
-                    green = 114 + ridge * 29
-                    blue = 90 + ridge * 18
+                } else if floodplain {
+                    red = 105 + ridge * 32
+                    green = 116 + ridge * 32
+                    blue = 86 + ridge * 19
                 } else if roof {
-                    red = 142 + flecks * 32
-                    green = 91 + flecks * 26
+                    red = 133 + flecks * 35
+                    green = 85 + flecks * 25
                     blue = 63 + flecks * 18
-                } else if roadDistance < 5 {
-                    red = 143 + grit * 21
-                    green = 136 + grit * 20
-                    blue = 109 + grit * 17
+                } else if gravelRoad {
+                    red = 146 + grit * 19
+                    green = 138 + grit * 17
+                    blue = 112 + grit * 14
+                } else if settlement {
+                    red = 111 + grit * 27
+                    green = 119 + grit * 23
+                    blue = 78 + grit * 17
                 } else if woodland {
                     red = 32 + thicket * 30
                     green = 55 + thicket * 48
                     blue = 29 + thicket * 22
-                } else if farmland {
-                    red = (88 + parcel * 79) * band
-                    green = (97 + parcel * 65) * band
-                    blue = (48 + parcel * 48) * band
+                } else if cultivated {
+                    red = (88 + parcel * 79) * fieldBand
+                    green = (97 + parcel * 65) * fieldBand
+                    blue = (48 + parcel * 48) * fieldBand
                 } else {
                     red = 79 + foliage * 58
                     green = 99 + foliage * 62
