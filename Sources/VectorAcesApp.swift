@@ -449,7 +449,7 @@ private final class AirBattleScene: SKScene {
     override func didChangeSize(_ oldSize: CGSize) {
         hud.position = CGPoint(x: 24, y: size.height - 22)
         status.position = CGPoint(x: size.width / 2, y: size.height / 2 + 80)
-        threat.position = CGPoint(x: size.width - 24, y: size.height - 277)
+        threat.position = CGPoint(x: size.width - 24, y: size.height - 306)
         layoutTelemetry()
         if player.position == .zero { player.position = CGPoint(x: size.width / 2, y: size.height / 2) }
     }
@@ -615,7 +615,8 @@ private final class AirBattleScene: SKScene {
                 let cloud = SKSpriteNode(texture: shapes[(bank + cluster) % shapes.count])
                 let scale = CGFloat.random(in: 0.68...1.45)
                 cloud.size = CGSize(width: 450 * scale, height: 200 * scale)
-                cloud.alpha = CGFloat.random(in: 0.53...0.83)
+                cloud.alpha = CGFloat.random(in: 0.53...0.83) *
+                    CGFloat(prefs.object(forKey:"aces.cloudDensity") as? Double ?? 1.0)
                 cloud.position = CGPoint(x: x, y: y)
                 cloud.zRotation = orientation + CGFloat.random(in: -0.12...0.12)
                 cloud.name = "cloud"
@@ -901,6 +902,7 @@ private final class AirBattleScene: SKScene {
         altitude = max(300, min(30000, altitude + climbRate * dt))
         if thrust { airspeed += 205 * dt }
         if brake { airspeed -= 235 * dt }
+        airspeed += (-climbRate * 0.012) * dt
         airspeed = max(105, min(fighter.speed + 95, airspeed))
         player.zRotation = heading - .pi / 2
         let velocity = CGVector(dx: cos(heading) * airspeed, dy: sin(heading) * airspeed)
@@ -1053,6 +1055,7 @@ private final class AirBattleScene: SKScene {
             let aimError = abs(atan2(sin(bearing - b.heading), cos(bearing - b.heading)))
             if b.tactic == .attack && b.fireCooldown <= 0 && distance < 440 && aimError < 0.19 {
                 fire(from: b.position, angle: b.heading, hostile: true)
+                sounds.play(.gun, volume:effectsVolume * 0.075)
                 b.fireCooldown = CGFloat.random(in: 0.9...1.75)
             }
             b.previousDistance = distance
@@ -1169,7 +1172,8 @@ private final class AirBattleScene: SKScene {
         }
     }
     private func takeDamage() {
-        health -= 1
+        let difficulty = prefs.integer(forKey:"aces.difficulty")
+        health -= difficulty == 2 ? 2 : 1
         invulnerableUntil = gameTime + 0.75
         burst(at: player.position, count: 24)
         sounds.play(.hit, volume: effectsVolume * 0.45)
@@ -1352,14 +1356,15 @@ private final class AirBattleScene: SKScene {
         hud.fontSize = 12
         hud.fontColor = .white.withAlphaComponent(0.82)
         telemetryPanel.fillColor = .black.withAlphaComponent(CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.35))
-        telemetryPanel.strokeColor = .cyan.withAlphaComponent(0.32)
-        telemetryPanel.lineWidth = 1
+        telemetryPanel.strokeColor = SKColor(white:0.81,alpha:0.17)
+        telemetryPanel.lineWidth = 0.55
         telemetryPanel.zPosition = 90
         addChild(telemetryPanel)
         for (i, label) in telemetryLines.enumerated() {
-            label.fontSize = i == 0 ? 13 : 11
-            label.fontColor = i == 0 ? .cyan : .white.withAlphaComponent(0.95)
-            label.horizontalAlignmentMode = .left
+            label.fontSize = i == 0 ? 9 : i == 6 ? 24 : i == 1 ? 12 : 10
+            label.fontColor = i == 0 ? SKColor(red:1,green:0.72,blue:0.4,alpha:0.95)
+                                      : .white.withAlphaComponent(0.94)
+            label.horizontalAlignmentMode = .right
             label.verticalAlignmentMode = .center
             label.zPosition = 92
             addChild(label)
@@ -1382,13 +1387,14 @@ private final class AirBattleScene: SKScene {
     private func layoutTelemetry() {
         let right = size.width - 18
         let panelWidth: CGFloat = 238
-        let panelHeight: CGFloat = 191
+        let panelHeight: CGFloat = 218
         let top = size.height - 65
         let panel = CGRect(x: right - panelWidth, y: top - panelHeight,
                            width: panelWidth, height: panelHeight)
         telemetryPanel.path = CGPath(roundedRect: panel, cornerWidth: 10, cornerHeight: 10, transform: nil)
         for (i, label) in telemetryLines.enumerated() {
-            label.position = CGPoint(x: panel.minX + 13, y: panel.maxY - 18 - CGFloat(i) * 25)
+            let offsets: [CGFloat] = [16, 42, 70, 96, 124, 152, 192]
+            label.position = CGPoint(x: panel.maxX - 13, y: panel.maxY - offsets[i])
         }
         let attitudeRect = CGRect(x: right - panelWidth, y: 249, width: panelWidth, height: 154)
         attitudePanel.path = CGPath(roundedRect: attitudeRect, cornerWidth: 10, cornerHeight: 10, transform: nil)
@@ -1458,13 +1464,13 @@ private final class AirBattleScene: SKScene {
         threat.position = CGPoint(x: size.width - 24, y: size.height - 277)
         hud.text = "VECTOR ACES  /  WWII AIR COMBAT"
         let rows = [
-            "FLIGHT TELEMETRY",
+            "VECTOR ACES  //  TELEMETRY",
             fighter.rawValue.uppercased(),
             String(format: "AIRSPEED  %03d MPH", Int(airspeed)),
             String(format: "HEADING   %03d DEG", Int((90 - heading * 180 / .pi).truncatingRemainder(dividingBy: 360) + 360) % 360),
             "ALT  \(Int(altitude)) FT  AIRFRAME \(max(0, health))/\(fighter.health)",
             "AMMO \(prefs.bool(forKey: "aces.unlimitedAmmo") ? "∞" : String(ammo))  WAVE \(wave)",
-            "KILLS \(kills)    SCORE \(score)"
+            String(format:"%06d",score)
         ]
         for (index, label) in telemetryLines.enumerated() { label.text = rows[index] }
         updateRadar()
