@@ -76,16 +76,19 @@ private struct FighterIllustration: View {
             // High contrast overhead technical illustration, drawn from
             // original paths rather than unlicensed historical imagery.
             var outline = Path()
-            let wing: CGFloat = fighter == .lightning ? 72 : fighter == .thunderbolt ? 67 : 59
+            let wing: CGFloat = fighter == .lightning ? 72 : fighter == .thunderbolt ? 67 : fighter == .mustang ? 59 : 55
+            let tipY: CGFloat = fighter == .mustang ? -1 : fighter == .thunderbolt ? 9 : fighter == .lightning ? 2 : 14
+            let rootY: CGFloat = fighter == .mustang ? 11 : fighter == .thunderbolt ? 6 : 16
+            let noseY: CGFloat = fighter == .thunderbolt ? 77 : 90
             let pts: [CGPoint] = [
-                .init(x:-7,y:75),.init(x:-11,y:38),
-                .init(x:-wing*0.85,y:13),.init(x:-wing,y:4),
-                .init(x:-wing,y:-9),.init(x:-13,y:-23),
+                .init(x:-7,y:noseY-12),.init(x:-11,y:38),
+                .init(x:-wing*0.85,y:rootY),.init(x:-wing,y:tipY+5),
+                .init(x:-wing,y:tipY-11),.init(x:-13,y:-23),
                 .init(x:-9,y:-65),.init(x:-4,y:-80),
                 .init(x:4,y:-80),.init(x:9,y:-65),
-                .init(x:13,y:-23),.init(x:wing,y:-9),
-                .init(x:wing,y:4),.init(x:wing*0.85,y:13),
-                .init(x:11,y:38),.init(x:7,y:75),.init(x:0,y:86)
+                .init(x:13,y:-23),.init(x:wing,y:tipY-11),
+                .init(x:wing,y:tipY+5),.init(x:wing*0.85,y:rootY),
+                .init(x:11,y:38),.init(x:7,y:noseY-12),.init(x:0,y:noseY)
             ]
             for (i,p) in pts.enumerated() {
                 let q = CGPoint(x:center.x+p.x*unit,y:center.y-p.y*unit)
@@ -108,6 +111,23 @@ private struct FighterIllustration: View {
             let canopy = Path(ellipseIn:CGRect(x:center.x-8*unit,y:center.y-36*unit,width:16*unit,height:32*unit))
             context.fill(canopy, with:.color(Color(red:0.10,green:0.24,blue:0.37)))
             context.stroke(canopy, with:.color(AcesStyle.ice),lineWidth:1.8)
+            // Aerodynamic and engineering details: engine, ailerons, gun ports.
+            let cowling = Path(ellipseIn:CGRect(x:center.x-9*unit,y:center.y-70*unit,width:18*unit,height:15*unit))
+            context.stroke(cowling,with:.color(AcesStyle.ice.opacity(0.57)),lineWidth:1.6)
+            for side in [CGFloat(-1),CGFloat(1)] {
+                var aileron = Path()
+                aileron.move(to:CGPoint(x:center.x+side*wing*0.46*unit,
+                                        y:center.y-tipY*unit+4*unit))
+                aileron.addLine(to:CGPoint(x:center.x+side*wing*0.89*unit,
+                                            y:center.y-tipY*unit+7*unit))
+                context.stroke(aileron,with:.color(AcesStyle.ice.opacity(0.43)),lineWidth:1)
+                for port in 0..<(fighter == .thunderbolt ? 4 : fighter == .lightning ? 0 : 3) {
+                    let barrel = Path(ellipseIn:CGRect(x:center.x+side*CGFloat(22+port*8)*unit-1.4*unit,
+                                                        y:center.y-(rootY+1)*unit,
+                                                        width:2.8*unit,height:5*unit))
+                    context.fill(barrel,with:.color(.black.opacity(0.75)))
+                }
+            }
             let tail = CGRect(x:center.x-25*unit,y:center.y+61*unit,width:50*unit,height:5*unit)
             context.fill(Path(tail),with:.color(AcesStyle.ice.opacity(0.7)))
             for delta in [-0.42,0.42] {
@@ -116,7 +136,12 @@ private struct FighterIllustration: View {
                 line.addLine(to:CGPoint(x:center.x+delta*wing*unit,y:center.y+12*unit))
                 context.stroke(line,with:.color(.black.opacity(0.4)),lineWidth:1)
             }
-            context.draw(Text("TOP VIEW / SCHEMATIC").font(.system(size:11,weight:.medium,design:.monospaced)).foregroundColor(AcesStyle.ice.opacity(0.65)),at:CGPoint(x:105,y:15))
+            let technical = fighter == .lightning ? "TWIN BOOM / NOSE BATTERY" :
+                fighter == .thunderbolt ? "RADIAL ENGINE / 8-GUN WINGS" :
+                fighter == .mustang ? "LAMINAR WING / LONG RANGE" :
+                "INLINE ENGINE / PURSUIT"
+            context.draw(Text("TOP VIEW / SCHEMATIC").font(.system(size:10,weight:.medium,design:.monospaced)).foregroundColor(AcesStyle.ice.opacity(0.65)),at:CGPoint(x:112,y:15))
+            context.draw(Text(technical).font(.system(size:10,weight:.medium,design:.monospaced)).foregroundColor(AcesStyle.amber.opacity(0.8)),at:CGPoint(x:size.width-125,y:size.height-17))
         }
         .background {
             GeometryReader { geometry in
@@ -983,7 +1008,7 @@ private final class AirBattleScene: SKScene {
             sprite.zPosition = 15
             let color = kind == 2 ? SKColor(red: 0.43, green: 0.45, blue: 0.33, alpha: 1) : SKColor(red: 0.45, green: 0.47, blue: 0.43, alpha: 1)
             sprite.addChild(drawAircraft(kind: kind, color: color))
-            sprite.setScale(kind == 2 ? 1.17 : kind == 1 ? 0.87 : 0.96)
+            sprite.setScale((kind == 2 ? 1.17 : kind == 1 ? 0.87 : 0.96) * 0.9)
             addChild(sprite)
             bandits.append(Bandit(sprite: sprite, position: location, heading: toward, speed: kind == 2 ? 150 : CGFloat.random(in: 180...240),
                                   health: kind == 2 ? 5 : (wave >= 3 ? 3 : 2), kind: kind, formationTime: CGFloat.random(in: 1.7...3.7) + row * 0.25,
@@ -1522,6 +1547,7 @@ private final class AirBattleScene: SKScene {
         pausedGame = false
         invulnerableUntil = 0
         status.text = ""
+        sounds.startEngine(volume:effectsVolume * 0.18)
         updateLabels()
     }
 }
