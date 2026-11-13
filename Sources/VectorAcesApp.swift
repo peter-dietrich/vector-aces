@@ -116,9 +116,10 @@ private final class AirBattleScene: SKScene {
     private var rounds: [Round] = []
     private var effects: [SKNode] = []
     private var environment = SKNode()
-    private var terrainTiles: [SKSpriteNode] = []
-    private var cloudClusters: [SKNode] = []
+    private var terrainTiles: [String: SKSpriteNode] = [:]
     private var terrainOffset = CGPoint.zero
+    private var cloudClusters: [SKNode] = []
+    private let terrainTileSize: CGFloat = 1024
     private var lastTime: TimeInterval = 0
     private var gameTime: CGFloat = 0
     private var lastFire: CGFloat = -1
@@ -323,19 +324,9 @@ private final class AirBattleScene: SKScene {
         // Satellite-style terrain is rendered locally and needs no network connection.
         // A real geo-referenced texture can later replace this tile source with
         // properly credited public-domain NASA/USGS imagery.
-        let textures = (0..<4).map { terrainTexture(seed: $0 * 73 + 19) }
-        for row in -1...1 {
-            for col in -1...1 {
-                let tile = SKSpriteNode(texture: textures[((row + 1) * 3 + col + 1) % 4],
-                                        size: CGSize(width: 1536, height: 1536))
-                tile.name = "terrain"
-                tile.zPosition = -20
-                tile.position = CGPoint(x: CGFloat(col) * 1536 + 768,
-                                        y: CGFloat(row) * 1536 + 768)
-                environment.addChild(tile)
-                terrainTiles.append(tile)
-            }
-        }
+        // Stream individually unique tiles from absolute world coordinates.
+        // Each neighboring tile samples the same continuous landscape function.
+        updateTerrainTiles(initial: true)
 
         // Organize cloud populations into fronts, broken banks and isolated puffs;
         // shadow layers give them height without obscuring dogfight visibility.
@@ -373,72 +364,174 @@ private final class AirBattleScene: SKScene {
         }
     }
 
-    private func terrainTexture(seed: Int) -> SKTexture {
-        // Multi-frequency satellite-style raster. Vegetation, dry farmland,
-        // forests, river beds and fine grain vary at different spatial scales.
-        let n = 384
-        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: n,
-                                           pixelsHigh: n, bitsPerSample: 8,
-                                           samplesPerPixel: 4, hasAlpha: true,
-                                           isPlanar: false, colorSpaceName: .deviceRGB,
-                                           bytesPerRow: n * 4, bitsPerPixel: 32),
-              let bytes = bitmap.bitmapData else {
+    private func terrainKey(_ x: Int, _ y: Int) -> String { "\(x):\(y)" }
+
+    private func updateTerrainTiles(initial: Bool = false) {
+        let tile = terrainTileSize
+        // Terrain world position plus camera offset = screen position.
+        let cameraX = Double(-terrainOffset.x + size.width * 0.5)
+        let cameraY = Double(-terrainOffset.y + size.height * 0.5)
+        let centerX = Int(floor(cameraX / Double(tile)))
+        let centerY = Int(floor(cameraY / Double(tile)))
+        var expected = Set<String>()
+        for row in (centerY - 1)...(centerY + 1) {
+            for col in (centerX - 1)...(centerX + 1) {
+                expected.insert(terrainKey(col, row))
+            }
+        }
+        // Remove old tiles first, so memory remains bounded on long flights.
+        for (key, sprite) in terrainTiles where !expected.contains(key) {
+            sprite.removeFromParent()
+            terrainTiles.removeValue(forKey: key)
+        }
+        var generated = 0
+        for row in (centerY - 1)...(centerY + 1) {
+            for col in (centerX - 1)...(centerX + 1) {
+                let key = terrainKey(col, row)
+                if let sprite = terrainTiles[key] {
+                    sprite.position = CGPoint(x: CGFloat(col) * tile + tile / 2 + terrainOffset.x,
+                                              y: CGFloat(row) * tile + tile / 2 + terrainOffset.y)
+                    continue
+                }
+                // Generate up to two new textures in a frame after startup.
+                if !initial && generated >= 2 { continue }
+                let sprite = SKSpriteNode(texture: terrainTexture(tileX: col, tileY: row),
+                                          size: CGSize(width: tile, height: tile))
+                sprite.name = "terrain"
+                sprite.zPosition = -20
+                sprite.position = CGPoint(x: CGFloat(col) * tile + tile / 2 + terrainOffset.x,
+                                          y: CGFloat(row) * tile + tile / 2 + terrainOffset.y)
+                environment.addChild(sprite)
+                terrainTiles[key] = sprite
+                generated += 1
+            }
+        }
+    }
+
+    private func terrainHash(_ x: Int, _ y: Int, _ seed: Int) -> Double {
+        // Integer coordinate hash: stable across tiles and revisits.
+        var v = UInt64(bitPattern: Int64(x)) &* 0x9E3779B185EBCA87
+        v ^= UInt64(bitPattern: Int64(y)) &* 0xC2B2AE3D27D4EB4F
+        v ^= UInt64(seed) &* 0x165667B19E3779F9
+        v ^= v >> 30
+        v = v &* 0xBF58476D1CE4E5B9
+        v ^= v >> 27
+        v = v &* 0x94D049BB133111EB
+        v ^= v >> 31
+        return Double(v & 0xFFFFFF) / Double(0xFFFFFF)
+    }
+    private func terrainNoise(_ x: Double, _ y: Double, _ scale: Double, _ seed: Int) -> Double {
+        let sx = x / scale, sy = y / scale
+        let xi = Int(floor(sx)), yi = Int(floor(sy))
+        let fx = sx - floor(sx), fy = sy - floor(sy)
+        let u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy)
+        let a = terrainHash(xi, yi, seed)
+        let b = terrainHash(xi + 1, yi, seed)
+        let c = terrainHash(xi, yi + 1, seed)
+        let d = terrainHash(xi + 1, yi + 1, seed)
+        return (a + (b-a) * u) * (1-v) + (c + (d-c) * u) * v
+    }
+    private func terrainTexture(tileX: Int, tileY: Int) -> SKTexture {
+        // Entirely procedural, high-detail offline aerial landscape.
+        // World-space sampling removes tile-edge noise discontinuities.
+        let n = 512
+        guard let bmp = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: n,
+                                          pixelsHigh: n, bitsPerSample: 8,
+                                          samplesPerPixel: 4, hasAlpha: true,
+                                          isPlanar: false, colorSpaceName: .deviceRGB,
+                                          bytesPerRow: n * 4, bitsPerPixel: 32),
+              let data = bmp.bitmapData else {
             return SKTexture(image: NSImage(size: CGSize(width: 2, height: 2)))
         }
-        func hash(_ x: Int, _ y: Int, _ salt: Int) -> Double {
-            let a = sin(Double(x * 127 + y * 311 + seed * 31 + salt * 971) * 0.0174533) * 43758.5453
-            return a - floor(a)
-        }
-        func smooth(_ x: Double, _ y: Double, _ scale: Double, _ salt: Int) -> Double {
-            let xx = x / scale, yy = y / scale
-            let x0 = Int(floor(xx)), y0 = Int(floor(yy))
-            let fx = xx - floor(xx), fy = yy - floor(yy)
-            let u = fx * fx * (3 - 2 * fx)
-            let v = fy * fy * (3 - 2 * fy)
-            let a = hash(x0, y0, salt), b = hash(x0 + 1, y0, salt)
-            let c = hash(x0, y0 + 1, salt), d = hash(x0 + 1, y0 + 1, salt)
-            return (a * (1-u) + b*u) * (1-v) + (c * (1-u) + d*u) * v
-        }
-        let stride = bitmap.bytesPerRow
-        for y in 0..<n {
-            for x in 0..<n {
-                let xx = Double(x), yy = Double(y)
-                let hills = smooth(xx, yy, 155, 1) * 0.48 +
-                            smooth(xx, yy, 59, 2) * 0.31 +
-                            smooth(xx, yy, 18, 3) * 0.16 +
-                            hash(x, y, 4) * 0.05
-                let farmland = smooth(xx, yy, 240, 5)
-                let fieldStripe = Int((xx + sin(yy * 0.009) * 32) / 45) % 3
-                let forest = hills > 0.55 || (hills > 0.47 && farmland > 0.63)
-                let riverX = 352 + sin(yy / 84 + Double(seed)) * 118 +
-                             sin(yy / 33 + Double(seed) * 0.27) * 23
-                let riverDistance = abs(xx - riverX)
-                let r: Double, g: Double, b: Double
-                if riverDistance < 11 {
-                    (r,g,b) = (49 + hills*18, 85 + hills*25, 101 + hills*25)
-                } else if riverDistance < 19 {
-                    (r,g,b) = (94 + hills*18, 102 + hills*25, 76 + hills*18)
-                } else if forest {
-                    (r,g,b) = (33 + hills*30, 66 + hills*33, 38 + hills*21)
-                } else if fieldStripe == 0 {
-                    (r,g,b) = (93 + hills*51, 106 + hills*43, 57 + hills*24)
-                } else if fieldStripe == 1 {
-                    (r,g,b) = (103 + hills*43, 112 + hills*35, 68 + hills*20)
+        let stride = bmp.bytesPerRow
+        let originX = Double(tileX) * 1024
+        let originY = Double(tileY) * 1024
+        for py in 0..<n {
+            for px in 0..<n {
+                let x = originX + Double(px) * 2
+                let y = originY + Double(py) * 2
+                let regional = terrainNoise(x, y, 2400, 3)
+                let ridge = terrainNoise(x, y, 680, 7)
+                let foliage = terrainNoise(x, y, 190, 11)
+                let thicket = terrainNoise(x, y, 49, 13)
+                let grit = terrainNoise(x, y, 9, 17)
+                let flecks = terrainHash(Int(x), Int(y), 23)
+                let vegetation = 0.32 * regional + 0.27 * ridge +
+                                 0.26 * foliage + 0.13 * thicket + 0.02 * grit
+                let villageRegionX = Int(floor(x / 1800))
+                let villageRegionY = Int(floor(y / 1800))
+                let farmland = terrainHash(villageRegionX, villageRegionY, 33) > 0.35
+                let parcelX = Int(floor((x + sin(y / 420) * 140) / 210))
+                let parcelY = Int(floor((y + cos(x / 390) * 110) / 155))
+                let parcel = terrainHash(parcelX, parcelY, 31)
+                let band = 0.82 + 0.2 * terrainNoise(x, y, 31, 41)
+                let woodland = vegetation > (farmland ? 0.52 : 0.43)
+                // Rivers continue globally across tiles; narrow winding side streams vary.
+                let river = 750 + sin(y / 525) * 350 + sin(y / 163) * 85 +
+                            sin(y / 59) * 19
+                let waterDist = abs(x - river)
+                let tributary = 1850 + cos(y / 700 + 1.7) * 290 +
+                                sin(y / 127) * 58
+                let tributaryDist = abs(x - tributary)
+                // Gravel routes snake through fields; road junctions create hamlets.
+                let roadV = Double(Int(floor((x + sin(y / 600) * 65) / 1050))) * 1050 +
+                            520 - sin(y / 600) * 65
+                let roadH = Double(Int(floor((y + sin(x / 490) * 52) / 1250))) * 1250 +
+                            630 - sin(x / 490) * 52
+                let roadDistance = min(abs(x - roadV), abs(y - roadH))
+                let roadJunction = abs(x - roadV) < 95 && abs(y - roadH) < 115
+                let houseX = Int(floor(x / 23))
+                let houseY = Int(floor(y / 22))
+                let roof = roadJunction && terrainHash(houseX, houseY, 99) > 0.73 &&
+                           abs((x.truncatingRemainder(dividingBy: 23)) - 11.5) < 8 &&
+                           abs((y.truncatingRemainder(dividingBy: 22)) - 11) < 6
+                var red: Double
+                var green: Double
+                var blue: Double
+                if waterDist < 15 || tributaryDist < 7 {
+                    red = 39 + ridge * 21
+                    green = 74 + ridge * 32
+                    blue = 83 + foliage * 29
+                } else if waterDist < 30 || tributaryDist < 17 {
+                    red = 112 + ridge * 32
+                    green = 114 + ridge * 29
+                    blue = 90 + ridge * 18
+                } else if roof {
+                    red = 142 + flecks * 32
+                    green = 91 + flecks * 26
+                    blue = 63 + flecks * 18
+                } else if roadDistance < 5 {
+                    red = 143 + grit * 21
+                    green = 136 + grit * 20
+                    blue = 109 + grit * 17
+                } else if woodland {
+                    red = 32 + thicket * 30
+                    green = 55 + thicket * 48
+                    blue = 29 + thicket * 22
+                } else if farmland {
+                    red = (88 + parcel * 79) * band
+                    green = (97 + parcel * 65) * band
+                    blue = (48 + parcel * 48) * band
                 } else {
-                    (r,g,b) = (114 + hills*45, 107 + hills*42, 67 + hills*21)
+                    red = 79 + foliage * 58
+                    green = 99 + foliage * 62
+                    blue = 52 + foliage * 43
                 }
-                let pixel = y * stride + x * 4
-                bytes[pixel] = UInt8(max(0, min(255, Int(r))))
-                bytes[pixel+1] = UInt8(max(0, min(255, Int(g))))
-                bytes[pixel+2] = UInt8(max(0, min(255, Int(b))))
-                bytes[pixel+3] = 255
+                // Microtexture and low-angle relief make the ground read like
+                // photographed terrain rather than flat colored rectangles.
+                let relief = (grit - 0.5) * 21 + (flecks - 0.5) * 13
+                let pixel = py * stride + px * 4
+                data[pixel] = UInt8(max(0, min(255, Int(red + relief))))
+                data[pixel+1] = UInt8(max(0, min(255, Int(green + relief))))
+                data[pixel+2] = UInt8(max(0, min(255, Int(blue + relief))))
+                data[pixel+3] = 255
             }
         }
         let image = NSImage(size: NSSize(width: n, height: n))
-        image.addRepresentation(bitmap)
-        let texture = SKTexture(image: image)
-        texture.filteringMode = .linear
-        return texture
+        image.addRepresentation(bmp)
+        let tex = SKTexture(image: image)
+        tex.filteringMode = .linear
+        return tex
     }
 
     private func cloudTexture(seed: Int) -> SKTexture {
@@ -501,19 +594,15 @@ private final class AirBattleScene: SKScene {
         let cameraY = max(0, next.y - (size.height - marginY)) + min(0, next.y - marginY)
         let scroll = CGVector(dx: -cameraX, dy: -cameraY)
         player.position = CGPoint(x: next.x + scroll.dx, y: next.y + scroll.dy)
-        // Every world object receives the same camera displacement.
-        for node in environment.children {
+        // Camera-relative world streaming; terrain tiles are keyed by coordinates.
+        terrainOffset.x += scroll.dx
+        terrainOffset.y += scroll.dy
+        updateTerrainTiles()
+        for node in environment.children where node.name != "terrain" {
             let parallax: CGFloat = node.name == "cloud" ? 0.77 : 1
             node.position.x += scroll.dx * parallax
             node.position.y += scroll.dy * parallax
-            if node.name == "terrain" {
-                let strideX: CGFloat = 1536
-                let strideY: CGFloat = 1536
-                while node.position.x < -strideX * 0.55 { node.position.x += strideX * 3 }
-                while node.position.x > size.width + strideX * 1.4 { node.position.x -= strideX * 3 }
-                while node.position.y < -strideY * 0.55 { node.position.y += strideY * 3 }
-                while node.position.y > size.height + strideY * 1.4 { node.position.y -= strideY * 3 }
-            } else if node.name == "cloud" || node.name == "shadow" {
+            if node.name == "cloud" || node.name == "shadow" {
                 let wind: CGFloat = 8 * dt
                 node.position.x += wind
                 if node.position.x < -460 { node.position.x += size.width + 980 }
