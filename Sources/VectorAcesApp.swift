@@ -138,7 +138,10 @@ private final class AirBattleScene: SKScene {
         if event.keyCode == 36 && lost { reset() }
     }
     override func keyUp(with event: NSEvent) { keys.remove(event.keyCode) }
-    override func resignFirstResponder() { keys.removeAll() }
+    override func resignFirstResponder() -> Bool {
+        keys.removeAll()
+        return super.resignFirstResponder()
+    }
 
     private func makeBackdrop() {
         for layer in 0..<3 {
