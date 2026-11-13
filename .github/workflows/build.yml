@@ -1,0 +1,16 @@
+name: Vector Aces macOS build
+on:
+  push:
+    branches: [main, feature/vector-aces-initial]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Vector Aces on macOS
+        run: |
+          xcodebuild -project VectorAces.xcodeproj -scheme VectorAces \
+            -destination 'platform=macOS' -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO build
