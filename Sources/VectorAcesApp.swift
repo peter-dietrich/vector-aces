@@ -1490,6 +1490,9 @@ private final class AirBattleScene: SKScene {
             blip.fillColor = .orange
             blip.strokeColor = .red
             blip.glowWidth = 1.5
+            let swept = (radarSweep - atan2(py, px)).truncatingRemainder(dividingBy: 2 * .pi)
+            let lag = swept < 0 ? swept + 2 * .pi : swept
+            blip.alpha = 0.16 + 0.84 * exp(-lag * 0.53)
             radarContacts.addChild(blip)
         }
     }
