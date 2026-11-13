@@ -863,6 +863,7 @@ private final class AirBattleScene: SKScene {
         let dt = CGFloat(min(currentTime - lastTime, 0.04))
         lastTime = currentTime
         if pausedGame || gameOver { return }
+        if deathStarted { return }
         gameTime += dt
         wave = max(1, prefs.integer(forKey: "aces.startWave")) + Int(gameTime / 36)
         let left = keys.contains(123) || keys.contains(0)
@@ -1429,6 +1430,7 @@ private final class AirBattleScene: SKScene {
         health = fighter.health
         deathStarted = false
         player.removeAllActions()
+        if player.parent == nil { addChild(player) }
         player.setScale(0.9)
         player.alpha = 1
         ammo = fighter.ammunition
@@ -1450,3 +1452,51 @@ private final class AirBattleScene: SKScene {
         updateLabels()
     }
 }
+
+private final class CombatAudio {
+    enum Effect { case engine, gun, hit, explosion }
+    private let engine = AVAudioEngine()
+    private let player = AVAudioPlayerNode()
+    private let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+    init() {
+        engine.attach(player)
+        engine.connect(player,to:engine.mainMixerNode,format:format)
+        try? engine.start()
+    }
+    func play(_ effect: Effect, volume: Double) {
+        guard volume > 0 else { return }
+        if !engine.isRunning { try? engine.start() }
+        guard engine.isRunning else { return }
+        let duration: Double
+        switch effect {
+        case .engine: duration = 0.32
+        case .gun: duration = 0.11
+        case .hit: duration = 0.22
+        case .explosion: duration = 0.85
+        }
+        let count = Int(44100 * duration)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat:format,frameCapacity:AVAudioFrameCount(count)),
+              let samples = buffer.floatChannelData?.pointee else { return }
+        buffer.frameLength = AVAudioFrameCount(count)
+        for i in 0..<count {
+            let t = Double(i) / 44100
+            let noise = Double.random(in:-1...1)
+            let envelope = max(0,1 - t/duration)
+            let wave: Double
+            switch effect {
+            case .engine:
+                wave = (sin(2 * .pi * 76 * t) + 0.28 * sin(2 * .pi * 153 * t)) * envelope
+            case .gun:
+                wave = (noise * 0.72 + sin(2 * .pi * 86 * t) * 0.28) * pow(envelope,2)
+            case .hit:
+                wave = (noise * 0.65 + sin(2 * .pi * 145 * t) * 0.35) * envelope
+            case .explosion:
+                wave = (noise * 0.75 + sin(2 * .pi * (56 - t * 24) * t) * 0.25) * envelope * envelope
+            }
+            samples[i] = Float(max(-0.85,min(0.85,wave * volume)))
+        }
+        player.scheduleBuffer(buffer,completionHandler:nil)
+        if !player.isPlaying { player.play() }
+    }
+}
+
