@@ -1669,7 +1669,7 @@ private final class AirBattleScene: SKScene {
             if b.tactic == .attack && b.fireCooldown <= 0 && altitudeAligned &&
                (!obscured || distance < 150) &&
                distance < shotRange && aim < aimTolerance {
-                fire(from:b.position,angle:b.heading,hostile:true)
+                fire(from:b.position,angle:b.heading,hostile:true,sourceAltitude:b.altitude)
                 sounds.play(.gun,volume:effectsVolume*0.075)
                 let cooldownBase: CGFloat = difficulty == 0 ? 2.6 :
                     difficulty == 1 ? 1.75 : 1.35
@@ -1749,7 +1749,8 @@ private final class AirBattleScene: SKScene {
     }
 
     private func fire(from origin: CGPoint, angle: CGFloat, hostile: Bool,
-                      lateral: CGFloat = 0, forward: CGFloat = 0) {
+                      lateral: CGFloat = 0, forward: CGFloat = 0,
+                      sourceAltitude: CGFloat? = nil) {
         let round = SKShapeNode(rectOf: CGSize(width: 4, height: hostile ? 13 : 20), cornerRadius: 2)
         round.fillColor = hostile ? .orange : .yellow
         round.strokeColor = .clear
@@ -1763,10 +1764,7 @@ private final class AirBattleScene: SKScene {
         rounds.append(Round(sprite:round, position:round.position,
                             velocity:CGVector(dx:cos(angle)*speed,dy:sin(angle)*speed),
                             lifetime:hostile ? 1.8 : 1.3, hostile:hostile,
-                            altitude:hostile ? (bandits.min(by:{
-                                hypot($0.position.x-origin.x,$0.position.y-origin.y) <
-                                hypot($1.position.x-origin.x,$1.position.y-origin.y)
-                            })?.altitude ?? altitude) : altitude,
+                            altitude:sourceAltitude ?? altitude,
                             diveAttack:!hostile && climbRate < -32 && flightEnergy > 48))
     }
     private func updateRounds(dt: CGFloat, scrolling: CGVector) {
