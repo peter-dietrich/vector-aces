@@ -728,6 +728,7 @@ private final class AirBattleScene: SKScene {
         var wingIndex: Int = 0
         var evadeCooldown: CGFloat = 0
         var attackPasses: Int = 0
+        var isAce: Bool = false
         var altitude: CGFloat = 7600
         var climbVelocity: CGFloat = 0
         var sizeAtSpawn: CGFloat = 1
@@ -1416,6 +1417,10 @@ private final class AirBattleScene: SKScene {
         terrainOffset.x += scroll.dx
         terrainOffset.y += scroll.dy
         updateTerrainTiles()
+        for node in allies {
+            node.position.x += scroll.dx
+            node.position.y += scroll.dy
+        }
         for node in environment.children where node.name != "terrain" {
             let parallax: CGFloat = node.name == "cloud" ? 0.77 : 1
             node.position.x += scroll.dx * parallax
@@ -1706,7 +1711,7 @@ private final class AirBattleScene: SKScene {
                 spawnCampaignFighters(count:2,elite:false)
                 escortWaveIndex += 1
             }
-            updateAlliedEscort()
+            updateAlliedEscort(dt:1.0/60.0)
             missionText.text = "B-17 SURVIVORS \(allyHealth.filter{$0>0}.count)/3  //  TIME \(Int(max(0,campaignMission.duration-missionTime)))"
         case .ace:
             if !eliteLaunched && missionTime >= 2 {
@@ -1739,10 +1744,10 @@ private final class AirBattleScene: SKScene {
         }
     }
 
-    private func updateAlliedEscort() {
+    private func updateAlliedEscort(dt: CGFloat) {
         for i in allies.indices where allyHealth[i] > 0 {
             let node = allies[i]
-            node.position.x += 1.0
+            node.position.x += 62 * dt
             node.position.y += sin(missionTime*0.7+CGFloat(i))*0.3
         }
         if missionTime-lastAllyAttack < 2.8 { return }
@@ -1800,7 +1805,7 @@ private final class AirBattleScene: SKScene {
             enemy.wingIndex = i
             enemy.altitude = altitude + CGFloat.random(in:-300...300)
             enemy.sizeAtSpawn = sprite.xScale
-            if elite && i == 0 { enemy.attackPasses = -99 }
+            enemy.isAce = elite && i == 0
             bandits.append(enemy)
         }
         flash(elite ? "RED ACE DETECTED — PRIORITY TARGET" : "HOSTILE FIGHTERS APPROACHING")
@@ -2239,7 +2244,7 @@ private final class AirBattleScene: SKScene {
                             crashPlane(bandits[j].sprite, position: bandits[j].position, duration: 1.05)
                             sounds.play(.explosion, volume: effectsVolume * 0.65)
                             let wasBomber = bandits[j].missionBomber
-                            let wasElite = bandits[j].attackPasses < -90
+                            let wasElite = bandits[j].isAce
                             let wasEscort = playMode == .interception && !wasBomber
                             bandits.remove(at: j)
                             if wasBomber { bomberDestroyed += 1 }
@@ -2886,6 +2891,10 @@ private final class AirBattleScene: SKScene {
             airfieldHealth = 3
             missionEscortKills = 0
             missionHitsTaken = 0
+            escortWaveIndex = 0
+            eliteLaunched = false
+            eliteDown = false
+            campaignKillsAtStart = 0
             configureAirfield()
             showMissionBriefing()
         }
