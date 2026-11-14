@@ -1714,6 +1714,16 @@ private final class AirBattleScene: SKScene {
                 for j in bandits.indices.reversed() {
                     if hypot(bullet.position.x - bandits[j].position.x, bullet.position.y - bandits[j].position.y) < 35 {
                         bandits[j].health -= 1
+                        // Direct hits provoke a defensive break rather than a
+                        // pilot blindly continuing a straight firing run.
+                        if bandits[j].health > 0 && !bandits[j].missionBomber &&
+                           bandits[j].evadeCooldown <= 0 {
+                            bandits[j].tactic = .evade
+                            bandits[j].tacticTime = CGFloat.random(in:0.75...1.3)
+                            bandits[j].evadeCooldown = 4.8
+                            bandits[j].maneuverSign = Bool.random() ? 1 : -1
+                            bandits[j].fireCooldown = max(bandits[j].fireCooldown,0.55)
+                        }
                         burst(at: bullet.position, count: 5)
                         consumed = true
                         if bandits[j].health <= 0 {
