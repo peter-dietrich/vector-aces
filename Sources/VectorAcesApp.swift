@@ -596,6 +596,7 @@ private struct AcesGameWindow: View {
     let onHangar: () -> Void
     @AppStorage("aces.difficulty") private var difficulty = 1
     @AppStorage("aces.soundEnabled") private var soundEnabled = true
+    @AppStorage("aces.campaign.selected") private var selectedCampaignMission = 1
     @State private var showingCustom = false
     @State private var scene: AirBattleScene
 
@@ -616,7 +617,7 @@ private struct AcesGameWindow: View {
                             Text("VECTOR ACES")
                                 .font(.system(size:19,weight:.black,design:.monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.14c")
+                            Text("v2026.11.14d")
                                 .font(.system(size:10,weight:.medium,design:.monospaced))
                                 .foregroundStyle(.gray)
                         }
@@ -638,7 +639,7 @@ private struct AcesGameWindow: View {
                         }
                     Button("Hangar") { onHangar() }
                         .keyboardShortcut(.escape,modifiers:[])
-                    Button(mode == .interception ? "Launch / Retry" : "New Game") {
+                    Button(mode == .interception ? "Continue / Retry" : "New Game") {
                         if mode == .interception { scene.startOrRetryMission() }
                         else { scene.restart() }
                     }
@@ -661,7 +662,9 @@ private struct AcesGameWindow: View {
                         }
                     }
                     Spacer()
-                    Text(mode == .interception ? mission.title : fighter.rawValue.uppercased())
+                    Text(mode == .interception ?
+                         (AcesCampaignMission(rawValue:selectedCampaignMission) ?? mission).title :
+                         fighter.rawValue.uppercased())
                         .font(.system(size:10,weight:.semibold,design:.monospaced))
                         .foregroundStyle(.cyan.opacity(0.73))
                     Button("Pause / Resume") { scene.togglePause() }
@@ -744,7 +747,7 @@ private final class AirBattleScene: SKScene {
     }
     private let fighter: Fighter
     private let playMode: AcesPlayMode
-    private let campaignMission: AcesCampaignMission
+    private var campaignMission: AcesCampaignMission
     private enum MissionStage { case briefing, active, success, failure }
     private var missionStage: MissionStage = .briefing
     private var missionTime: CGFloat = 0
@@ -912,8 +915,10 @@ private final class AirBattleScene: SKScene {
     override func keyDown(with event: NSEvent) {
         keys.insert(event.keyCode)
         if playMode == .interception && event.keyCode == 36 && !event.isARepeat {
-            if missionStage == .briefing { beginMission(); return }
-            if missionStage == .success || missionStage == .failure { restart(); return }
+            if missionStage != .active {
+                startOrRetryMission()
+                return
+            }
         }
         if event.keyCode == 35 && !event.isARepeat && !gameOver &&
            (playMode == .endless || missionStage == .active) {
@@ -1725,8 +1730,25 @@ private final class AirBattleScene: SKScene {
 
     func startOrRetryMission() {
         guard playMode == .interception else { return }
-        if missionStage != .briefing { restart() }
-        beginMission()
+        switch missionStage {
+        case .briefing:
+            beginMission()
+        case .success:
+            // A successful debrief must advance the actual active scene,
+            // not merely unlock the next entry in UserDefaults.
+            if let next = AcesCampaignMission(rawValue:campaignMission.rawValue+1),
+               next.rawValue <= AcesPilotLog.unlocked {
+                campaignMission = next
+                prefs.set(next.rawValue,forKey:"aces.campaign.selected")
+                restart()                 // Present the NEXT briefing before takeoff.
+            } else {
+                restart()                 // Last mission completed: replay or Hangar.
+            }
+        case .failure, .active:
+            restart()
+            beginMission()               // Retry the CURRENT mission immediately.
+        }
+        view?.window?.makeFirstResponder(self)
     }
 
     private func beginMission() {
@@ -2000,13 +2022,19 @@ private final class AirBattleScene: SKScene {
         let awards = AcesPilotLog.record(mission:campaignMission,victory:success,
                     score:score,kills:max(0,kills-campaignKillsAtStart),
                     stars:stars,damage:missionHitsTaken)
+        let next = AcesCampaignMission(rawValue:campaignMission.rawValue+1)
+        let advancement = success && next != nil && next!.rawValue <= AcesPilotLog.unlocked
+        let footer = advancement ?
+            "PRESS RETURN  /  NEXT: \(next!.title)" :
+            success ? "CAMPAIGN COMPLETE  /  RETURN TO REPLAY" :
+                      "PRESS RETURN  /  RETRY MISSION"
         let lines = [
             success ? "MISSION COMPLETE  //  VICTORY" : "MISSION FAILED  //  RETREAT",
             reason,
             "MISSION \(campaignMission.rawValue)  /  \(campaignMission.title)",
             "HOSTILES DOWN \(max(0,kills-campaignKillsAtStart))  /  DAMAGE TAKEN \(missionHitsTaken)",
             "TOTAL SCORE  \(score)  /  RANK  \(AcesPilotLog.rank)",
-            "\(stars) STAR MISSION  •  \(awards.first ?? "RETURN TO RETRY")"
+            footer
         ]
         missionBackdrop.isHidden = false
         for (label,line) in zip(missionCopy,lines) {
