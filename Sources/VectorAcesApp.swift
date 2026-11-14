@@ -1035,7 +1035,7 @@ private final class AirBattleScene: SKScene {
         // Forward heading and muzzle geometry remain independent of banking.
         playerArtwork.xScale = 1 - abs(bankAngle) * 0.27
         playerArtwork.yScale = 1 + abs(bankAngle) * 0.055
-        playerArtwork.x = bankAngle * 8
+        playerArtwork.position.x = bankAngle * 8
         playerArtwork.zRotation = -bankAngle * 0.12
         let velocity = CGVector(dx: cos(heading) * airspeed, dy: sin(heading) * airspeed)
         // Free flight with a generous camera dead-zone. The aircraft crosses the
@@ -1676,7 +1676,7 @@ private final class AirBattleScene: SKScene {
         player.setScale(0.9)
         playerArtwork.xScale = 1
         playerArtwork.yScale = 1
-        playerArtwork.x = 0
+        playerArtwork.position.x = 0
         playerArtwork.zRotation = 0
         player.alpha = 1
         ammo = fighter.ammunition
