@@ -473,6 +473,7 @@ private final class AirBattleScene: SKScene {
     }
     private let fighter: Fighter
     private var player = SKNode()
+    private let playerArtwork = SKNode()
     private var keys = Set<UInt16>()
     private var bandits: [Bandit] = []
     private var rounds: [Round] = []
@@ -535,7 +536,8 @@ private final class AirBattleScene: SKScene {
         buildGround()
         player.position = CGPoint(x: size.width / 2, y: size.height / 2)
         player.zPosition = 20
-        player.addChild(drawAircraft(kind: -1, color: fighter.color))
+        playerArtwork.addChild(drawAircraft(kind: -1, color: fighter.color))
+        player.addChild(playerArtwork)
         player.zRotation = heading - .pi / 2
         player.setScale(0.9)
         addChild(player)
@@ -556,7 +558,9 @@ private final class AirBattleScene: SKScene {
         if prefs.bool(forKey: "aces.resumeRequested") { loadRun() }
         prefs.set(false, forKey: "aces.resumeRequested")
         updateLabels()
-        sounds.startEngine(volume:effectsVolume * 0.18)
+        if prefs.object(forKey:"aces.soundEnabled") as? Bool ?? true {
+            sounds.startEngine(volume:effectsVolume * 0.18)
+        }
         view.window?.makeFirstResponder(self)
     }
     override func willMove(from view: SKView) {
@@ -1021,8 +1025,16 @@ private final class AirBattleScene: SKScene {
         if brake { airspeed -= 235 * dt }
         airspeed += (-climbRate * 0.012) * dt
         airspeed = max(105, min(fighter.speed + 95, airspeed))
-        sounds.engineVolume = Float(effectsVolume * (0.08 + Double(airspeed) / 1900))
+        sounds.engineVolume = (prefs.object(forKey:"aces.soundEnabled") as? Bool ?? true)
+            ? Float(effectsVolume * (0.08 + Double(airspeed) / 1900)) : 0
         player.zRotation = heading - .pi / 2
+        // The aircraft pivots into its bank and presents a foreshortened wing
+        // profile rather than staying a rigid flat silhouette during turns.
+        // Forward heading and muzzle geometry remain independent of banking.
+        playerArtwork.xScale = 1 - abs(bankAngle) * 0.27
+        playerArtwork.yScale = 1 + abs(bankAngle) * 0.055
+        playerArtwork.x = bankAngle * 8
+        playerArtwork.zRotation = -bankAngle * 0.12
         let velocity = CGVector(dx: cos(heading) * airspeed, dy: sin(heading) * airspeed)
         // Free flight with a generous camera dead-zone. The aircraft crosses the
         // screen naturally, and only then does the camera pan to follow it.
@@ -1329,6 +1341,35 @@ private final class AirBattleScene: SKScene {
             if self?.gameOver == false && self?.pausedGame == false { self?.status.text = "" }
         }]))
     }
+    func saveNow() {
+        if !gameOver && !deathStarted { saveRun() }
+    }
+    func resumeSavedSortie() {
+        guard prefs.bool(forKey:"aces.hasSave") else { return }
+        restart()
+        loadRun()
+        pausedGame = false
+        status.text = "SORTIE RESUMED"
+        status.run(.sequence([.wait(forDuration:1.1),.run { [weak self] in
+            self?.status.text = ""
+        }]))
+        view?.window?.makeFirstResponder(self)
+    }
+    func togglePause() {
+        guard !gameOver && !deathStarted else { return }
+        pausedGame.toggle()
+        status.text = pausedGame ? "PAUSED — P TO RESUME" : ""
+        view?.window?.makeFirstResponder(self)
+    }
+    func setSoundEnabled(_ enabled: Bool) {
+        if enabled {
+            sounds.startEngine(volume:effectsVolume * 0.18)
+        } else {
+            sounds.stopEngine()
+        }
+        view?.window?.makeFirstResponder(self)
+    }
+
     private func saveRun() {
         let snapshot: [String: Any] = [
             "fighter": fighter.rawValue, "score":score, "kills":kills,
@@ -1619,6 +1660,10 @@ private final class AirBattleScene: SKScene {
         player.removeAllActions()
         if player.parent == nil { addChild(player) }
         player.setScale(0.9)
+        playerArtwork.xScale = 1
+        playerArtwork.yScale = 1
+        playerArtwork.x = 0
+        playerArtwork.zRotation = 0
         player.alpha = 1
         ammo = fighter.ammunition
         altitude = 7600
@@ -1636,7 +1681,9 @@ private final class AirBattleScene: SKScene {
         pausedGame = false
         invulnerableUntil = 0
         status.text = ""
-        sounds.startEngine(volume:effectsVolume * 0.18)
+        if prefs.object(forKey:"aces.soundEnabled") as? Bool ?? true {
+            sounds.startEngine(volume:effectsVolume * 0.18)
+        }
         updateLabels()
     }
 }
