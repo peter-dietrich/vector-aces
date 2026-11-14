@@ -1703,78 +1703,132 @@ private final class AirBattleScene: SKScene {
 }
 
 private final class CombatAudio {
-    enum Effect { case engine, gun, hit, explosion, warning, menu }
+    enum Effect: CaseIterable, Hashable { case gun, hit, explosion, warning, menu }
     static let shared = CombatAudio()
+
+    // Continuous engine audio never shares a playback queue with combat effects.
     private let engine = AVAudioEngine()
-    private let player = AVAudioPlayerNode()
     private let enginePlayer = AVAudioPlayerNode()
-    var engineVolume: Float = 0.12 { didSet { enginePlayer.volume = engineVolume } }
-    private let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
-    init() {
-        engine.attach(player)
+    private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+    private var buffers: [Effect: AVAudioPCMBuffer] = [:]
+    private var voices: [Effect: [AVAudioPlayerNode]] = [:]
+    private var nextVoice: [Effect: Int] = [:]
+    private var engineBuffer: AVAudioPCMBuffer?
+    var engineVolume: Float = 0.12 {
+        didSet { enginePlayer.volume = engineVolume }
+    }
+
+    private init() {
         engine.attach(enginePlayer)
-        engine.connect(player,to:engine.mainMixerNode,format:format)
-        engine.connect(enginePlayer,to:engine.mainMixerNode,format:format)
+        engine.connect(enginePlayer, to: engine.mainMixerNode, format: format)
+        // Generate and attach every sound ONCE, before the first dogfight.
+        // No audio synthesis or new AVAudioPlayerNode allocation occurs on shot.
+        for effect in Effect.allCases {
+            buffers[effect] = makeBuffer(effect)
+            let voiceCount: Int
+            switch effect {
+            case .gun: voiceCount = 12
+            case .explosion: voiceCount = 6
+            case .hit: voiceCount = 4
+            case .warning: voiceCount = 2
+            case .menu: voiceCount = 3
+            }
+            let pool = (0..<voiceCount).map { _ -> AVAudioPlayerNode in
+                let node = AVAudioPlayerNode()
+                engine.attach(node)
+                engine.connect(node, to: engine.mainMixerNode, format: format)
+                return node
+            }
+            voices[effect] = pool
+            nextVoice[effect] = 0
+        }
+        engineBuffer = makeEngineBuffer()
+        engine.prepare()
         try? engine.start()
     }
-    func startEngine(volume:Double) {
+
+    func startEngine(volume: Double) {
         if !engine.isRunning { try? engine.start() }
-        guard engine.isRunning else { return }
+        guard engine.isRunning, let buffer = engineBuffer else { return }
         enginePlayer.stop()
-        let count = 44100
-        guard let buffer = AVAudioPCMBuffer(pcmFormat:format,frameCapacity:AVAudioFrameCount(count)),
-              let samples = buffer.floatChannelData?.pointee else { return }
-        buffer.frameLength = AVAudioFrameCount(count)
-        for i in 0..<count {
-            let t = Double(i) / 44100
-            let envelope = 0.7 + 0.3 * sin(2 * .pi * 5 * t)
-            samples[i] = Float((sin(2 * .pi * 76 * t) + 0.23 * sin(2 * .pi * 152 * t)) * envelope * 0.5)
-        }
-        enginePlayer.scheduleBuffer(buffer,at:nil,options:.loops,completionHandler:nil)
-        engineVolume = Float(volume)
+        enginePlayer.scheduleBuffer(buffer, at: nil, options: .loops)
+        engineVolume = Float(max(0, min(1, volume)))
         enginePlayer.play()
     }
+
     func stopEngine() { enginePlayer.stop() }
+
     func play(_ effect: Effect, volume: Double) {
-        guard volume > 0 else { return }
+        guard volume > 0, let buffer = buffers[effect],
+              let pool = voices[effect], !pool.isEmpty else { return }
         if !engine.isRunning { try? engine.start() }
         guard engine.isRunning else { return }
-        let duration: Double
-        switch effect {
-        case .engine: duration = 0.32
-        case .gun: duration = 0.11
-        case .hit: duration = 0.22
-        case .explosion: duration = 0.85
-        case .warning: duration = 0.18
-        case .menu: duration = 0.11
-        }
-        let count = Int(44100 * duration)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat:format,frameCapacity:AVAudioFrameCount(count)),
-              let samples = buffer.floatChannelData?.pointee else { return }
+
+        // Choose an idle voice first. If every voice is busy, replace the
+        // oldest round-robin voice instead of queuing behind old gunshots.
+        let cursor = nextVoice[effect] ?? 0
+        let selected = (0..<pool.count)
+            .map { (cursor + $0) % pool.count }
+            .first { !pool[$0].isPlaying } ?? cursor
+        let node = pool[selected]
+        nextVoice[effect] = (selected + 1) % pool.count
+        node.stop() // Clear any residual scheduled audio on this voice.
+        node.volume = Float(max(0, min(1, volume)))
+        node.scheduleBuffer(buffer, at: nil, options: .interrupts)
+        node.play()
+    }
+
+    private func makeEngineBuffer() -> AVAudioPCMBuffer? {
+        let count = 44_100
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
+                                          frameCapacity: AVAudioFrameCount(count)),
+              let samples = buffer.floatChannelData?.pointee else { return nil }
         buffer.frameLength = AVAudioFrameCount(count)
         for i in 0..<count {
-            let t = Double(i) / 44100
-            let noise = Double.random(in:-1...1)
-            let envelope = max(0,1 - t/duration)
+            let t = Double(i) / 44_100
+            let envelope = 0.7 + 0.3 * sin(2 * .pi * 5 * t)
+            samples[i] = Float((sin(2 * .pi * 76 * t) +
+                                0.23 * sin(2 * .pi * 152 * t)) * envelope * 0.5)
+        }
+        return buffer
+    }
+
+    private func makeBuffer(_ effect: Effect) -> AVAudioPCMBuffer? {
+        let duration: Double
+        switch effect {
+        case .gun: duration = 0.09
+        case .hit: duration = 0.19
+        case .explosion: duration = 0.76
+        case .warning: duration = 0.18
+        case .menu: duration = 0.09
+        }
+        let count = Int(44_100 * duration)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
+                                          frameCapacity: AVAudioFrameCount(count)),
+              let samples = buffer.floatChannelData?.pointee else { return nil }
+        buffer.frameLength = AVAudioFrameCount(count)
+        for i in 0..<count {
+            let t = Double(i) / 44_100
+            let noise = Double.random(in: -1...1)
+            let envelope = max(0, 1 - t / duration)
             let wave: Double
             switch effect {
-            case .engine:
-                wave = (sin(2 * .pi * 76 * t) + 0.28 * sin(2 * .pi * 153 * t)) * envelope
             case .gun:
-                wave = (noise * 0.72 + sin(2 * .pi * 86 * t) * 0.28) * pow(envelope,2)
+                wave = (noise * 0.72 + sin(2 * .pi * 86 * t) * 0.28)
+                    * envelope * envelope
             case .hit:
-                wave = (noise * 0.65 + sin(2 * .pi * 145 * t) * 0.35) * envelope
+                wave = (noise * 0.65 + sin(2 * .pi * 145 * t) * 0.35)
+                    * envelope
             case .explosion:
-                wave = (noise * 0.75 + sin(2 * .pi * (56 - t * 24) * t) * 0.25) * envelope * envelope
+                wave = (noise * 0.75 + sin(2 * .pi * (56 - t * 24) * t) * 0.25)
+                    * envelope * envelope
             case .warning:
                 wave = sin(2 * .pi * 820 * t) * envelope
             case .menu:
                 wave = sin(2 * .pi * 620 * t) * envelope
             }
-            samples[i] = Float(max(-0.85,min(0.85,wave * volume)))
+            samples[i] = Float(max(-0.85, min(0.85, wave)))
         }
-        player.scheduleBuffer(buffer,completionHandler:nil)
-        if !player.isPlaying { player.play() }
+        return buffer
     }
 }
-
