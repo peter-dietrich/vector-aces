@@ -1181,41 +1181,48 @@ private final class AirBattleScene: SKScene {
 
     private func updateTerrainTiles(initial: Bool = false) {
         let tile = terrainTileSize
-        // Terrain world position plus camera offset = screen position.
-        let cameraX = Double(-terrainOffset.x + size.width * 0.5)
-        let cameraY = Double(-terrainOffset.y + size.height * 0.5)
-        let centerX = Int(floor(cameraX / Double(tile)))
-        let centerY = Int(floor(cameraY / Double(tile)))
+        // The visible footprint is now 3.2x wider in each dimension.
+        // Load *exactly* the tiles intersecting that footprint plus a small
+        // predictive buffer; the old fixed 3x3 region left black borders.
+        let cameraX = -terrainOffset.x + size.width * 0.5
+        let cameraY = -terrainOffset.y + size.height * 0.5
+        let halfWidth = size.width * battlefieldZoom * 0.5
+        let halfHeight = size.height * battlefieldZoom * 0.5
+        let preload: CGFloat = tile * 0.25
+        let left = Int(floor((cameraX - halfWidth - preload) / tile))
+        let right = Int(floor((cameraX + halfWidth + preload) / tile))
+        let bottom = Int(floor((cameraY - halfHeight - preload) / tile))
+        let top = Int(floor((cameraY + halfHeight + preload) / tile))
         var expected = Set<String>()
-        for row in (centerY - 1)...(centerY + 1) {
-            for col in (centerX - 1)...(centerX + 1) {
-                expected.insert(terrainKey(col, row))
+        for row in bottom...top {
+            for col in left...right {
+                expected.insert(terrainKey(col,row))
             }
         }
-        // Remove old tiles first, so memory remains bounded on long flights.
-        for (key, sprite) in terrainTiles where !expected.contains(key) {
+        for (key,sprite) in terrainTiles where !expected.contains(key) {
             sprite.removeFromParent()
-            terrainTiles.removeValue(forKey: key)
+            terrainTiles.removeValue(forKey:key)
         }
+        // Stream a few tiles per frame on large camera moves.
+        // Startup covers the entire strategic viewport before first play.
         var generated = 0
-        for row in (centerY - 1)...(centerY + 1) {
-            for col in (centerX - 1)...(centerX + 1) {
-                let key = terrainKey(col, row)
-                if let sprite = terrainTiles[key] {
-                    sprite.position = CGPoint(x: CGFloat(col) * tile + tile / 2 + terrainOffset.x,
-                                              y: CGFloat(row) * tile + tile / 2 + terrainOffset.y)
+        for row in bottom...top {
+            for col in left...right {
+                let key=terrainKey(col,row)
+                let location=CGPoint(x:CGFloat(col)*tile + tile/2 + terrainOffset.x,
+                                     y:CGFloat(row)*tile + tile/2 + terrainOffset.y)
+                if let sprite=terrainTiles[key] {
+                    sprite.position=location
                     continue
                 }
-                // Generate up to two new textures in a frame after startup.
-                if !initial && generated >= 2 { continue }
-                let sprite = SKSpriteNode(texture: terrainTexture(tileX: col, tileY: row),
-                                          size: CGSize(width: tile, height: tile))
-                sprite.name = "terrain"
+                if !initial && generated >= 3 { continue }
+                let sprite=SKSpriteNode(texture:terrainTexture(tileX:col,tileY:row),
+                                        size:CGSize(width:tile,height:tile))
+                sprite.name="terrain"
                 sprite.zPosition = -20
-                sprite.position = CGPoint(x: CGFloat(col) * tile + tile / 2 + terrainOffset.x,
-                                          y: CGFloat(row) * tile + tile / 2 + terrainOffset.y)
+                sprite.position=location
                 environment.addChild(sprite)
-                terrainTiles[key] = sprite
+                terrainTiles[key]=sprite
                 generated += 1
             }
         }
@@ -1247,7 +1254,9 @@ private final class AirBattleScene: SKScene {
     private func terrainTexture(tileX: Int, tileY: Int) -> SKTexture {
         // Entirely procedural, high-detail offline aerial landscape.
         // World-space sampling removes tile-edge noise discontinuities.
-        let n = 512
+        // 320 pixels across a 1024-unit tile is ~1 screen pixel/texel at 3.2x zoom.
+        // This preserves aerial detail without multiplying terrain memory by 10x.
+        let n = 320
         guard let bmp = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: n,
                                           pixelsHigh: n, bitsPerSample: 8,
                                           samplesPerPixel: 4, hasAlpha: true,
@@ -1257,15 +1266,16 @@ private final class AirBattleScene: SKScene {
             return SKTexture(image: NSImage(size: CGSize(width: 2, height: 2)))
         }
         let stride = bmp.bytesPerRow
-        let originX = Double(tileX) * 1024
-        let originY = Double(tileY) * 1024
+        let originX = Double(tileX) * Double(terrainTileSize)
+        let originY = Double(tileY) * Double(terrainTileSize)
+        let sampleStep = Double(terrainTileSize) / Double(n)
         for py in 0..<n {
             for px in 0..<n {
-                let x = originX + Double(px) * 2
+                let x = originX + Double(px) * sampleStep
                 // NSBitmapImageRep's first row is the TOP; SpriteKit's scene
                 // coordinates increase UP. Flip sample Y to keep adjacent
                 // north/south tiles geographically seamless.
-                let y = originY + Double(n - 1 - py) * 2
+                let y = originY + Double(n - 1 - py) * sampleStep
                 let regional = terrainNoise(x, y, 2800, 3)
                 let ridge = terrainNoise(x, y, 670, 7)
                 let foliage = terrainNoise(x, y, 165, 11)
