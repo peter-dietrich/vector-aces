@@ -803,6 +803,8 @@ private final class AirBattleScene: SKScene {
     private var hitCombo = 0
     private var comboDeadline: CGFloat = 0
     private let threat = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let leftFlightHUD = LeftFlightHUDNode()
+    private let rightCombatHUD = RightCombatHUDNode()
     private let telemetryPanel = SKShapeNode()
     private let telemetryLines = (0..<19).map { _ in SKLabelNode(fontNamed: "Menlo-Bold") }
     private let telemetryAccent = SKShapeNode()
@@ -869,6 +871,9 @@ private final class AirBattleScene: SKScene {
         addChild(tacticalCue)
         configureLeadCue()
         installTelemetry()
+        addChild(leftFlightHUD)
+        addChild(rightCombatHUD)
+        layoutGraphicalHUD()
         if playMode == .interception {
             configureAirfield()
             configureMissionOverlay()
@@ -891,6 +896,7 @@ private final class AirBattleScene: SKScene {
         status.position = CGPoint(x: size.width / 2, y: size.height / 2 + 80)
         threat.position = CGPoint(x: size.width - 24, y: size.height - 233)
         layoutTelemetry()
+        layoutGraphicalHUD()
         layoutMissionOverlay()
         tacticalCue.position = CGPoint(x: 23, y: size.height - 65)
         if player.position == .zero { player.position = CGPoint(x: size.width / 2, y: size.height / 2) }
@@ -1625,7 +1631,8 @@ private final class AirBattleScene: SKScene {
         for (i,label) in missionCopy.enumerated() {
             label.position = CGPoint(x:rect.midX,y:rect.maxY - CGFloat(i)*46 - 41)
         }
-        missionText.position = CGPoint(x:22,y:size.height-22)
+        missionText.position = CGPoint(x:size.width/2,y:size.height-26)
+        missionText.horizontalAlignmentMode = .center
     }
 
     private func showMissionBriefing() {
@@ -2900,7 +2907,7 @@ private final class AirBattleScene: SKScene {
         }
         // The external threat banner is governed by the combat AI and stays
         // visible during the closest rear attack.
-        updateRadar()
+        updateGraphicalHUD()
     }
     func restart() {
         for b in bandits { b.sprite.removeFromParent() }
