@@ -87,3 +87,14 @@
 - Radar, telemetry, terrain, audio, mission and endless modes are intended to remain operational.
 - Verify on Mac: can track a retreating Bf 109, see two Fw 190s flank rather than stack, observe evasive reactions after shooting, and complete Stop the Stukas despite escort pressure.
 - **Build verification must be checked for the final commit.** Previously an intermediate commit failed an exhaustive switch check after enum expansion; later updates replaced that switch. The Xcode build/mission balancing need verification.
+
+## Phase 3 — Tactical Flight (Nov 13, 2026)
+- Q climbs, E descends. Climbing now costs airspeed and maneuver energy; diving restores speed and can unlock **BOOM & ZOOM** score rewards for successful kills. Fast flight improves turning response without making slow turns impossible.
+- Player and German aircraft have individual altitudes. Fw 190 and Bf 109 adjust their altitude toward the player; mission Stukas gradually descend toward their airfield objective. Projectile impacts and aircraft collision require compatible altitude rather than a 2D screen overlap alone.
+- Original visual cloud banks now define altitude bands: near matching altitude and position, cloud concealment prevents long-range AI attacks and suppresses precise lead-aiming cues; close-range gunfights remain possible.
+- Predictive cyan lead reticle appears on a close, forward, altitude-matched and unobscured hostile. It is a gunnery aid, not auto-aim.
+- Below 700 feet the game warns about terrain; an unrecovered descent below the ground threshold starts player crash. User should test whether this feels fair.
+- Fighters have different turn, climb and dive profiles. The Thunderbolt has the strongest dive; the Warhawk turns fastest in this arcade interpretation.
+- A discreet tactical prompt indicates cloud cover, climbing energy drain, dive-attack opportunity and low-altitude warning; existing Vector Drift-styled telemetry now reports ENERGY and COVER.
+- Endless run save/restore preserves flight energy alongside altitude, speed and heading. Mission 01 and Endless controls and selection remain unchanged.
+- **Runtime QA required:** assess Q/E responsiveness, climb versus dive tradeoff, altitude-mismatch combat fairness, radar/lead cues, cloud concealment, terrain warning, bombers/escorts at mission altitudes and Mac audio performance. CI compilation checks do not validate gameplay feel.
