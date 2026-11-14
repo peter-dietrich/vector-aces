@@ -510,6 +510,7 @@ private final class AirBattleScene: SKScene {
     private let radarRange: CGFloat = 2400 // World-space arcade units; about 4.5x the old range.
     private let radarPanel = SKShapeNode()
     private let radarContacts = SKNode()
+    private let radarLegend = SKLabelNode(fontNamed:"Menlo-Bold")
     private var gunCycle = 0
     private var ammo: Int
     private var altitude: CGFloat = 7600
@@ -1569,6 +1570,12 @@ private final class AirBattleScene: SKScene {
         addChild(radarPanel)
         radarContacts.zPosition = 93
         addChild(radarContacts)
+        radarLegend.fontSize = 9
+        radarLegend.fontColor = SKColor(calibratedWhite:0.86,alpha:0.89)
+        radarLegend.horizontalAlignmentMode = .right
+        radarLegend.zPosition = 95
+        radarLegend.text = "LONG RANGE  /  2400 UNITS"
+        addChild(radarLegend)
 
         attitudePanel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13,
             alpha: CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.23))
@@ -1619,7 +1626,8 @@ private final class AirBattleScene: SKScene {
                                 height:max(100,attitudeRect.minY - radarBottom - 8))
         radarPanel.path = CGPath(roundedRect:radarFrame,cornerWidth:8,cornerHeight:8,transform:nil)
         radarRadius = min(84,(radarFrame.height - 24) / 2)
-        radarContacts.position = CGPoint(x:radarFrame.midX,y:radarFrame.midY)
+        radarContacts.position = CGPoint(x:radarFrame.midX,y:radarFrame.midY - 4)
+        radarLegend.position = CGPoint(x:radarFrame.maxX - 11,y:radarFrame.maxY - 14)
     }
     private func updateRadar() {
         if gameTime - lastRadarRender < 0.045 { return }
@@ -1663,18 +1671,23 @@ private final class AirBattleScene: SKScene {
             // Player-forward is always up on the radar.
             let lateral = sin(heading) * dx - cos(heading) * dy
             let ahead = cos(heading) * dx + sin(heading) * dy
-            let px = lateral * 0.16
-            let py = ahead * 0.16
-            let distance = hypot(px, py)
-            if distance > radius { continue }
-            let blip = SKShapeNode(circleOfRadius: bandit.kind == 2 ? 4.2 : 3.3)
+            // 2400 game-world units displayed out to the outer ring.
+            // Nonlinear radial compression preserves near-contact separation.
+            let actualRange = hypot(lateral,ahead)
+            if actualRange > radarRange { continue }
+            let rangeFraction = actualRange / radarRange
+            let renderedRadius = radius * pow(rangeFraction,0.77)
+            let px = actualRange > 0 ? (lateral / actualRange) * renderedRadius : 0
+            let py = actualRange > 0 ? (ahead / actualRange) * renderedRadius : 0
+            let contactSize: CGFloat = bandit.kind == 2 ? 4.0 : 3.1
+            let blip = SKShapeNode(circleOfRadius:contactSize * (1 - 0.30 * rangeFraction))
             blip.position = CGPoint(x: px, y: py)
             blip.fillColor = .orange
             blip.strokeColor = .red
             blip.glowWidth = 1.5
             let swept = (radarSweep - atan2(py, px)).truncatingRemainder(dividingBy: 2 * .pi)
             let lag = swept < 0 ? swept + 2 * .pi : swept
-            blip.alpha = 0.16 + 0.84 * exp(-lag * 0.53)
+            blip.alpha = (0.18 + 0.82 * exp(-lag * 0.53)) * (1 - 0.42 * rangeFraction)
             radarContacts.addChild(blip)
         }
     }
@@ -1682,7 +1695,7 @@ private final class AirBattleScene: SKScene {
     private func updateLabels() {
         status.position = CGPoint(x:size.width/2,y:size.height*0.64)
         // Important rear threats must remain readable outside the panel.
-        threat.position = CGPoint(x:size.width - 20,y:size.height - 423)
+        threat.position = CGPoint(x:size.width - 252,y:size.height - 29)
         hud.text = "VECTOR ACES / WWII AIR COMBAT"
         if score > prefs.integer(forKey:"aces.bestScore") {
             prefs.set(score,forKey:"aces.bestScore")
@@ -1707,12 +1720,12 @@ private final class AirBattleScene: SKScene {
             let hour = Int((12 - (relative * 6 / .pi)).rounded())
             let clock = ((hour % 12) + 12) % 12
             bearingText = String(format:"NEAREST  %02d O'CLOCK",clock == 0 ? 12 : clock)
-            rangeText = String(format:"RANGE  %04d GAME YD",Int(distance.rounded()))
+            rangeText = String(format:"RANGE  %04d UNITS",Int(distance.rounded()))
         }
         let airframe = max(0,health)
         let ammoText = prefs.bool(forKey:"aces.unlimitedAmmo") ? "UNLIMITED" : String(ammo)
         let altitudeBand = altitude < 3500 ? "LOW" : altitude < 15000 ? "COMBAT" : "HIGH"
-        let rate = Int(climbRate * 60 / 100)
+        let rate = Int(climbRate * 60)
         let engine = airframe <= 1 ? "CRITICAL" : airframe <= fighter.health / 2 ? "DAMAGED" : "NORMAL"
         let difficulty = ["ROOKIE","VETERAN","ACE"][min(2,max(0,prefs.integer(forKey:"aces.difficulty")))]
         let rows = [
@@ -1733,7 +1746,7 @@ private final class AirBattleScene: SKScene {
             "CONTACTS IN RANGE  \(contacts.count)",
             "FLIGHT SYSTEMS",
             "\(fighter.rawValue.uppercased())",
-            "HDG \(degrees)°  V/S \(rate >= 0 ? "+" : "")\(rate*100) FPM",
+            "HDG \(degrees)°  V/S \(rate >= 0 ? "+" : "")\(rate) FPM",
             "\(altitudeBand) ALT  /  ENGINE \(engine)",
         ]
         for (i,label) in telemetryLines.enumerated() {
