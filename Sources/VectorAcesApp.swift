@@ -673,6 +673,7 @@ private final class AirBattleScene: SKScene {
     private var allies: [SKNode] = []
     private var allyHealth: [Int] = []
     private var lastAllyAttack: CGFloat = 0
+    private var escortWaveIndex = 0
     private var eliteLaunched = false
     private var eliteDown = false
     private var campaignKillsAtStart = 0
@@ -1507,6 +1508,7 @@ private final class AirBattleScene: SKScene {
         eliteLaunched = false
         eliteDown = false
         lastAllyAttack = 0
+        escortWaveIndex = 0
         clearMissionAllies()
         if campaignMission == .escort { spawnAlliedBombers() }
         keys.removeAll()
@@ -1591,9 +1593,9 @@ private final class AirBattleScene: SKScene {
                 Int(max(0,campaignMission.duration-missionTime)))
         case .escort:
             let schedule: [CGFloat] = [2,26,50,74]
-            if let next = schedule.first(where: { missionTime >= $0 && missionTime-$0 < 0.05 }) {
-                _ = next
+            if escortWaveIndex < schedule.count && missionTime >= schedule[escortWaveIndex] {
                 spawnCampaignFighters(count:2,elite:false)
+                escortWaveIndex += 1
             }
             updateAlliedEscort()
             missionText.text = "B-17 SURVIVORS \(allyHealth.filter{$0>0}.count)/3  //  TIME \(Int(max(0,campaignMission.duration-missionTime)))"
@@ -1843,13 +1845,25 @@ private final class AirBattleScene: SKScene {
             b.tacticTime -= dt
             b.evadeCooldown = max(0,b.evadeCooldown-dt)
             b.fireCooldown -= dt
-            let dx = player.position.x-b.position.x
-            let dy = player.position.y-b.position.y
+            let escortTarget: CGPoint?
+            if playMode == .interception && campaignMission == .escort {
+                let closest = allies.indices.filter { allyHealth[$0] > 0 }.min(by: {
+                    hypot(allies[$0].position.x-b.position.x,allies[$0].position.y-b.position.y) <
+                    hypot(allies[$1].position.x-b.position.x,allies[$1].position.y-b.position.y)
+                })
+                escortTarget = closest.map { allies[$0].position }
+            } else {
+                escortTarget = nil
+            }
+            let target = escortTarget ?? player.position
+            let dx = target.x-b.position.x
+            let dy = target.y-b.position.y
             let distance = hypot(dx,dy)
             let bearing = atan2(dy,dx)
             let forwardX = cos(heading)
             let forwardY = sin(heading)
-            let playerBehind = cos(b.heading) * dx + sin(b.heading) * dy < -65
+            let playerBehind = cos(b.heading)*(player.position.x-b.position.x) +
+                               sin(b.heading)*(player.position.y-b.position.y) < -65
             let playerAimingAtBandit = cos(heading) * (b.position.x-player.position.x) +
                 sin(heading) * (b.position.y-player.position.y) > 0
             let playerToEnemy = atan2(b.position.y-player.position.y,
