@@ -3130,7 +3130,7 @@ private final class LeftFlightHUDNode: SKNode {
     func render(_ v:AcesFlightHUDValue) {
         horizon.zRotation = -v.bank
         horizon.position.y = max(-25,min(25,-v.verticalSpeed*0.15))
-        let degrees=(Int((90-v.heading*180/.pi).truncatingRemainder(dividingBy:360))+360)%360
+        let degrees=(Int((90-v.heading*180 / .pi).truncatingRemainder(dividingBy:360))+360)%360
         headingLabel.text=String(format:"HDG %03d°",degrees)
         let speedFraction=max(0,min(1,v.speed/max(v.topSpeed,1)))
         speedArc.path=AcesHUDVisual.arc(radius:50,fraction:speedFraction)
@@ -3272,7 +3272,7 @@ private final class RightCombatHUDNode: SKNode {
         compass.lineWidth=1.3
         addChild(compass)
         for index in 0..<12 {
-            let angle=CGFloat(index)*.pi/6
+            let angle=CGFloat(index) * .pi / 6
             addChild(AcesHUDVisual.line(
                 CGPoint(x:191+sin(angle)*40,y:-104+cos(angle)*40),
                 CGPoint(x:191+sin(angle)*45,y:-104+cos(angle)*45),
