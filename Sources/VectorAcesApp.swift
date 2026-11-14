@@ -2973,6 +2973,316 @@ private final class AirBattleScene: SKScene {
     }
 }
 
+// MARK: - Vector Aces graphical HUD (top-left local coordinates; y decreases downward)
+
+private enum AcesHUDVisual {
+    static let ice = SKColor(red:0.26,green:0.91,blue:0.97,alpha:1)
+    static let amber = SKColor(red:1.0,green:0.70,blue:0.31,alpha:1)
+    static let muted = SKColor(white:0.79,alpha:0.9)
+    static let red = SKColor(red:1.0,green:0.30,blue:0.27,alpha:1)
+    static func panel(_ box:CGRect) -> SKShapeNode {
+        let node = SKShapeNode(path:CGPath(roundedRect:box,cornerWidth:9,cornerHeight:9,transform:nil))
+        node.fillColor = SKColor(red:0.025,green:0.071,blue:0.11,alpha:0.82)
+        node.strokeColor = ice.withAlphaComponent(0.28)
+        node.lineWidth = 0.75
+        return node
+    }
+    @discardableResult
+    static func text(_ value:String, at point:CGPoint, size:CGFloat=10,
+                     color:SKColor=muted, parent:SKNode,
+                     align:SKLabelHorizontalAlignmentMode = .left) -> SKLabelNode {
+        let label = SKLabelNode(fontNamed:"Menlo-Bold")
+        label.text = value
+        label.position = point
+        label.fontSize = size
+        label.fontColor = color
+        label.horizontalAlignmentMode = align
+        label.verticalAlignmentMode = .center
+        parent.addChild(label)
+        return label
+    }
+    static func line(_ a:CGPoint,_ b:CGPoint,color:SKColor,width:CGFloat=1) -> SKShapeNode {
+        let path = CGMutablePath()
+        path.move(to:a)
+        path.addLine(to:b)
+        let node = SKShapeNode(path:path)
+        node.strokeColor = color
+        node.lineWidth = width
+        node.fillColor = .clear
+        return node
+    }
+    static func arc(radius:CGFloat, fraction:CGFloat) -> CGPath {
+        let p = CGMutablePath()
+        let initial:CGFloat = .pi*0.75
+        let extent:CGFloat = (.pi*1.5)*max(0,min(1,fraction))
+        p.addArc(center:.zero,radius:radius,startAngle:initial,
+                 endAngle:initial+extent,clockwise:false)
+        return p
+    }
+}
+
+private struct AcesFlightHUDValue {
+    let altitude:CGFloat
+    let verticalSpeed:CGFloat
+    let speed:CGFloat
+    let topSpeed:CGFloat
+    let energy:CGFloat
+    let bank:CGFloat
+    let health:Int
+    let maxHealth:Int
+    let heading:CGFloat
+    let cloud:Bool
+}
+
+private final class LeftFlightHUDNode: SKNode {
+    static let panelWidth:CGFloat = 224
+    private let horizon=SKNode()
+    private let speedArc=SKShapeNode()
+    private let energyArc=SKShapeNode()
+    private let airspeedLabel:SKLabelNode
+    private let energyLabel:SKLabelNode
+    private let altitudeLabel:SKLabelNode
+    private let vsLabel:SKLabelNode
+    private let topTick=SKLabelNode(fontNamed:"Menlo")
+    private let bottomTick=SKLabelNode(fontNamed:"Menlo")
+    private let vsPointer=SKShapeNode(rectOf:CGSize(width:16,height:5))
+    private let airframeShape=SKShapeNode()
+    private let healthLabel:SKLabelNode
+    private let conditionPips:[SKShapeNode]
+    private let headingLabel:SKLabelNode
+    private let coverLabel:SKLabelNode
+
+    override init() {
+        airspeedLabel=SKLabelNode(fontNamed:"Menlo-Bold")
+        energyLabel=SKLabelNode(fontNamed:"Menlo-Bold")
+        altitudeLabel=SKLabelNode(fontNamed:"Menlo-Bold")
+        vsLabel=SKLabelNode(fontNamed:"Menlo-Bold")
+        healthLabel=SKLabelNode(fontNamed:"Menlo-Bold")
+        headingLabel=SKLabelNode(fontNamed:"Menlo-Bold")
+        coverLabel=SKLabelNode(fontNamed:"Menlo-Bold")
+        conditionPips=(0..<10).map { _ in SKShapeNode(rectOf:CGSize(width:15,height:6),cornerRadius:2) }
+        super.init()
+        setup()
+    }
+    required init?(coder:NSCoder) { fatalError("Not supported") }
+
+    private func setup() {
+        zPosition=91
+        addChild(AcesHUDVisual.panel(CGRect(x:0,y:-214,width:224,height:214)))
+        addChild(AcesHUDVisual.panel(CGRect(x:0,y:-454,width:224,height:232)))
+        addChild(AcesHUDVisual.panel(CGRect(x:0,y:-614,width:224,height:152)))
+        AcesHUDVisual.text("FLIGHT // ATTITUDE",at:CGPoint(x:13,y:-19),
+                           size:10,color:AcesHUDVisual.amber,parent:self)
+        AcesHUDVisual.text("AIRSPEED + ENERGY",at:CGPoint(x:13,y:-243),
+                           size:10,color:AcesHUDVisual.amber,parent:self)
+        AcesHUDVisual.text("AIRFRAME / DAMAGE",at:CGPoint(x:13,y:-483),
+                           size:10,color:AcesHUDVisual.amber,parent:self)
+        addChild(AcesHUDVisual.line(CGPoint(x:14,y:-33),CGPoint(x:210,y:-33),
+                                    color:AcesHUDVisual.ice.withAlphaComponent(0.23)))
+        let bezel=SKShapeNode(circleOfRadius:71)
+        bezel.position=CGPoint(x:112,y:-115)
+        bezel.fillColor=SKColor(red:0.02,green:0.055,blue:0.085,alpha:1)
+        bezel.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.49)
+        bezel.lineWidth=2
+        addChild(bezel)
+
+        let crop=SKCropNode()
+        crop.position=CGPoint(x:112,y:-115)
+        let mask=SKShapeNode(circleOfRadius:66)
+        mask.fillColor = .white
+        crop.maskNode=mask
+        addChild(crop)
+        let sky=SKShapeNode(rectOf:CGSize(width:220,height:130))
+        sky.position=CGPoint(x:0,y:65)
+        sky.fillColor=SKColor(red:0.16,green:0.32,blue:0.49,alpha:1)
+        sky.strokeColor = .clear
+        horizon.addChild(sky)
+        let earth=SKShapeNode(rectOf:CGSize(width:220,height:130))
+        earth.position=CGPoint(x:0,y:-65)
+        earth.fillColor=SKColor(red:0.41,green:0.29,blue:0.17,alpha:1)
+        earth.strokeColor = .clear
+        horizon.addChild(earth)
+        let horizonLine=SKShapeNode(rectOf:CGSize(width:220,height:2))
+        horizonLine.fillColor = .white
+        horizonLine.strokeColor = .clear
+        horizon.addChild(horizonLine)
+        crop.addChild(horizon)
+        for angle in stride(from:-60,through:60,by:30) {
+            let a=CGFloat(angle)*CGFloat.pi/180
+            let r:CGFloat=69
+            addChild(AcesHUDVisual.line(
+                CGPoint(x:112+sin(a)*r,y:-115+cos(a)*r),
+                CGPoint(x:112+sin(a)*(r+6),y:-115+cos(a)*(r+6)),
+                color:AcesHUDVisual.muted,width:1.4))
+        }
+        addChild(AcesHUDVisual.line(CGPoint(x:80,y:-115),CGPoint(x:101,y:-115),
+                                    color:AcesHUDVisual.amber,width:2.5))
+        addChild(AcesHUDVisual.line(CGPoint(x:123,y:-115),CGPoint(x:144,y:-115),
+                                    color:AcesHUDVisual.amber,width:2.5))
+        let center=SKShapeNode(circleOfRadius:4)
+        center.position=CGPoint(x:112,y:-115)
+        center.fillColor=AcesHUDVisual.amber
+        center.strokeColor = .clear
+        addChild(center)
+
+        headingLabel.position=CGPoint(x:112,y:-199)
+        headingLabel.fontSize=11
+        headingLabel.fontColor=AcesHUDVisual.ice
+        headingLabel.horizontalAlignmentMode = .center
+        addChild(headingLabel)
+
+        // Sweep speed and energy rings, with a large numerical speed inside.
+        for radius in [CGFloat(50),42] {
+            let ring=SKShapeNode(path:AcesHUDVisual.arc(radius:radius,fraction:1))
+            ring.position=CGPoint(x:71,y:-349)
+            ring.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.14)
+            ring.lineWidth=7
+            addChild(ring)
+        }
+        speedArc.position=CGPoint(x:71,y:-349)
+        speedArc.strokeColor=AcesHUDVisual.ice
+        speedArc.lineWidth=7
+        addChild(speedArc)
+        energyArc.position=CGPoint(x:71,y:-349)
+        energyArc.strokeColor=AcesHUDVisual.amber
+        energyArc.lineWidth=5
+        addChild(energyArc)
+        airspeedLabel.position=CGPoint(x:71,y:-346)
+        airspeedLabel.horizontalAlignmentMode = .center
+        airspeedLabel.fontColor = .white
+        airspeedLabel.fontSize=24
+        addChild(airspeedLabel)
+        AcesHUDVisual.text("MPH",at:CGPoint(x:71,y:-367),size:10,
+                           color:AcesHUDVisual.muted,parent:self,align:.center)
+        energyLabel.position=CGPoint(x:71,y:-410)
+        energyLabel.horizontalAlignmentMode = .center
+        energyLabel.fontColor=AcesHUDVisual.amber
+        energyLabel.fontSize=11
+        addChild(energyLabel)
+
+        // Altimeter tape has moving numbers around the fixed central marker.
+        let tape=SKShapeNode(rect:CGRect(x:137,y:-409,width:54,height:128),cornerRadius:5)
+        tape.fillColor=SKColor.black.withAlphaComponent(0.30)
+        tape.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.23)
+        addChild(tape)
+        AcesHUDVisual.text("ALT",at:CGPoint(x:138,y:-270),size:9,
+                           color:AcesHUDVisual.muted,parent:self)
+        for offset in [-42,42] {
+            addChild(AcesHUDVisual.line(CGPoint(x:145,y:-345+CGFloat(offset)),
+                    CGPoint(x:183,y:-345+CGFloat(offset)),
+                    color:AcesHUDVisual.muted.withAlphaComponent(0.3)))
+        }
+        for label in [topTick,bottomTick] {
+            label.fontSize=10
+            label.fontColor=AcesHUDVisual.muted
+            label.horizontalAlignmentMode = .center
+            addChild(label)
+        }
+        topTick.position=CGPoint(x:164,y:-303)
+        bottomTick.position=CGPoint(x:164,y:-390)
+        altitudeLabel.position=CGPoint(x:164,y:-345)
+        altitudeLabel.fontSize=15
+        altitudeLabel.fontColor=AcesHUDVisual.ice
+        altitudeLabel.horizontalAlignmentMode = .center
+        addChild(altitudeLabel)
+        let tapeIndicator=SKShapeNode(rectOf:CGSize(width:5,height:15))
+        tapeIndicator.position=CGPoint(x:194,y:-345)
+        tapeIndicator.fillColor=AcesHUDVisual.amber
+        tapeIndicator.strokeColor = .clear
+        addChild(tapeIndicator)
+
+        // Rate-of-climb moving indicator at the right edge.
+        AcesHUDVisual.text("V/S",at:CGPoint(x:195,y:-270),size:8,
+                           color:AcesHUDVisual.muted,parent:self)
+        addChild(AcesHUDVisual.line(CGPoint(x:207,y:-393),CGPoint(x:207,y:-301),
+                                    color:AcesHUDVisual.muted.withAlphaComponent(0.4)))
+        vsPointer.fillColor=AcesHUDVisual.amber
+        vsPointer.strokeColor = .clear
+        addChild(vsPointer)
+        vsLabel.position=CGPoint(x:170,y:-439)
+        vsLabel.fontColor=AcesHUDVisual.ice
+        vsLabel.fontSize=10
+        vsLabel.horizontalAlignmentMode = .center
+        addChild(vsLabel)
+
+        // Fixed overhead silhouette, colour shifts with airframe damage.
+        let p=CGMutablePath()
+        p.move(to:CGPoint(x:110,y:-498))
+        p.addLine(to:CGPoint(x:116,y:-514))
+        p.addLine(to:CGPoint(x:123,y:-539))
+        p.addLine(to:CGPoint(x:181,y:-548))
+        p.addLine(to:CGPoint(x:183,y:-563))
+        p.addLine(to:CGPoint(x:123,y:-559))
+        p.addLine(to:CGPoint(x:119,y:-580))
+        p.addLine(to:CGPoint(x:137,y:-590))
+        p.addLine(to:CGPoint(x:137,y:-598))
+        p.addLine(to:CGPoint(x:105,y:-593))
+        p.addLine(to:CGPoint(x:73,y:-598))
+        p.addLine(to:CGPoint(x:73,y:-590))
+        p.addLine(to:CGPoint(x:91,y:-580))
+        p.addLine(to:CGPoint(x:87,y:-559))
+        p.addLine(to:CGPoint(x:27,y:-563))
+        p.addLine(to:CGPoint(x:29,y:-548))
+        p.addLine(to:CGPoint(x:87,y:-539))
+        p.addLine(to:CGPoint(x:94,y:-514))
+        p.addLine(to:CGPoint(x:100,y:-498))
+        p.closeSubpath()
+        airframeShape.path=p
+        airframeShape.fillColor=AcesHUDVisual.ice.withAlphaComponent(0.50)
+        airframeShape.strokeColor=AcesHUDVisual.ice
+        airframeShape.lineWidth=1.5
+        addChild(airframeShape)
+        healthLabel.position=CGPoint(x:211,y:-504)
+        healthLabel.horizontalAlignmentMode = .right
+        healthLabel.fontSize=10
+        addChild(healthLabel)
+        for (i,pip) in conditionPips.enumerated() {
+            pip.position=CGPoint(x:34+CGFloat(i)*17,y:-607)
+            pip.strokeColor = .clear
+            addChild(pip)
+        }
+        coverLabel.position=CGPoint(x:12,y:-447)
+        coverLabel.fontColor=AcesHUDVisual.amber
+        coverLabel.fontSize=9
+        addChild(coverLabel)
+    }
+    func layout(in sceneSize:CGSize) {
+        let factor=min(1,max(0.66,(sceneSize.height-22)/632))
+        setScale(factor)
+        position=CGPoint(x:14,y:sceneSize.height-14)
+    }
+    func render(_ v:AcesFlightHUDValue) {
+        horizon.zRotation = -v.bank
+        horizon.position.y = max(-25,min(25,-v.verticalSpeed*0.15))
+        let degrees=(Int((90-v.heading*180/.pi).truncatingRemainder(dividingBy:360))+360)%360
+        headingLabel.text=String(format:"HDG %03d°",degrees)
+        let speedFraction=max(0,min(1,v.speed/max(v.topSpeed,1)))
+        speedArc.path=AcesHUDVisual.arc(radius:50,fraction:speedFraction)
+        energyArc.path=AcesHUDVisual.arc(radius:42,fraction:v.energy/100)
+        airspeedLabel.text=String(Int(v.speed))
+        energyLabel.text="ENG \(Int(v.energy))%"
+        altitudeLabel.text=String(Int(v.altitude))
+        topTick.text=String(Int(v.altitude/100)*100+500)
+        bottomTick.text=String(max(0,Int(v.altitude/100)*100-500))
+        vsPointer.position=CGPoint(x:207,y:-347+max(-44,min(44,v.verticalSpeed*0.45)))
+        vsLabel.text=String(format:"%+.0f FT/M",v.verticalSpeed*60)
+        let ratio=CGFloat(max(0,v.health))/CGFloat(max(1,v.maxHealth))
+        let damaged=ratio < 0.3
+        let condition=damaged ? AcesHUDVisual.red :
+                      ratio < 0.65 ? AcesHUDVisual.amber : AcesHUDVisual.ice
+        airframeShape.fillColor=condition.withAlphaComponent(0.33)
+        airframeShape.strokeColor=condition
+        healthLabel.text="\(max(0,v.health))/\(v.maxHealth)"
+        healthLabel.fontColor=condition
+        for (i,pip) in conditionPips.enumerated() {
+            pip.fillColor=CGFloat(i)/10 < ratio ? condition :
+                         AcesHUDVisual.muted.withAlphaComponent(0.13)
+        }
+        coverLabel.text=v.cloud ? "● CLOUD COVER" : "● CLEAR"
+        coverLabel.fontColor=v.cloud ? AcesHUDVisual.amber : AcesHUDVisual.ice
+    }
+}
+
 private final class CombatAudio {
     enum Effect: CaseIterable, Hashable { case gun, hit, explosion, warning, menu }
     static let shared = CombatAudio()
