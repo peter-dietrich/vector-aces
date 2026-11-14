@@ -670,6 +670,12 @@ private final class AirBattleScene: SKScene {
     private var airfieldHealth = 3
     private var missionEscortKills = 0
     private var missionHitsTaken = 0
+    private var allies: [SKNode] = []
+    private var allyHealth: [Int] = []
+    private var lastAllyAttack: CGFloat = 0
+    private var eliteLaunched = false
+    private var eliteDown = false
+    private var campaignKillsAtStart = 0
     private let airfield = SKNode()
     private let missionText = SKLabelNode(fontNamed:"Menlo-Bold")
     private let missionBackdrop = SKShapeNode()
@@ -1442,17 +1448,38 @@ private final class AirBattleScene: SKScene {
     private func showMissionBriefing() {
         missionStage = .briefing
         missionBackdrop.isHidden = false
-        let lines = [
-            "MISSION 01  //  STOP THE STUKAS",
-            "SIX JU 87 DIVE BOMBERS APPROACH THE ALLIED AIRFIELD",
-            "FW 190 ESCORTS WILL TRY TO DRAW YOU AWAY",
-            "DESTROY AT LEAST FOUR BOMBERS BEFORE THEY STRIKE",
-            "THREE AIRFIELD DEFENSE POINTS  •  150 SECOND LIMIT",
-            "PRESS RETURN TO LAUNCH"
-        ]
-        for (label,line) in zip(missionCopy,lines) {
-            label.text = line; label.isHidden = false
+        let lines: [String]
+        switch campaignMission {
+        case .stukas:
+            lines = ["MISSION 01  //  STOP THE STUKAS",
+                "SIX JU 87 DIVE BOMBERS APPROACH THE ALLIED AIRFIELD",
+                "FW 190 ESCORTS WILL TRY TO DRAW YOU AWAY",
+                "DESTROY AT LEAST FOUR BOMBERS BEFORE THEY STRIKE",
+                "AIRFIELD INTEGRITY 3  •  150 SECOND LIMIT",
+                "PRESS RETURN TO LAUNCH"]
+        case .escort:
+            lines = ["MISSION 02  //  BOMBER ESCORT",
+                "THREE ALLIED B-17S CROSS ENEMY AIRSPACE",
+                "PROTECT THE FORMATION FROM GERMAN INTERCEPTORS",
+                "KEEP AT LEAST TWO BOMBERS FLYING",
+                "95 SECOND ESCORT WINDOW",
+                "PRESS RETURN TO LAUNCH"]
+        case .ace:
+            lines = ["MISSION 03  //  HUNT THE ACE",
+                "A DEADLY FW 190 PILOT IS OPERATING NEARBY",
+                "THE ACE IS PROTECTED BY TWO WINGMEN",
+                "FIND AND DESTROY THE ACE BEFORE HE ESCAPES",
+                "125 SECOND INTERCEPTION WINDOW",
+                "PRESS RETURN TO LAUNCH"]
+        case .bridge:
+            lines = ["MISSION 04  //  DEFEND THE BRIDGE",
+                "EIGHT DIVE BOMBERS APPROACH A STRATEGIC BRIDGE",
+                "FOUR WAVES ARRIVE WITH ENEMY ESCORTS",
+                "DESTROY AT LEAST FIVE OF THE EIGHT BOMBERS",
+                "BRIDGE INTEGRITY 3  •  155 SECOND LIMIT",
+                "PRESS RETURN TO LAUNCH"]
         }
+        for (label,line) in zip(missionCopy,lines) { label.text=line;label.isHidden=false }
         missionText.text = ""
         status.text = ""
     }
@@ -1476,6 +1503,12 @@ private final class AirBattleScene: SKScene {
         airfieldHealth = 3
         missionEscortKills = 0
         missionHitsTaken = 0
+        campaignKillsAtStart = kills
+        eliteLaunched = false
+        eliteDown = false
+        lastAllyAttack = 0
+        clearMissionAllies()
+        if campaignMission == .escort { spawnAlliedBombers() }
         keys.removeAll()
         status.text = ""
         view?.window?.makeFirstResponder(self)
@@ -2594,6 +2627,7 @@ private final class AirBattleScene: SKScene {
         invulnerableUntil = 0
         status.text = ""
         if playMode == .interception {
+            clearMissionAllies()
             missionTime = 0
             bomberLaunched = 0
             bomberDestroyed = 0
