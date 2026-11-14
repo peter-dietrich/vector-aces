@@ -302,6 +302,7 @@ private struct AcesSettings: View {
     @State private var showingSettings = false
     @AppStorage("aces.hasSave") private var hasSave = false
     @AppStorage("aces.playMode") private var playMode = AcesPlayMode.interception.rawValue
+    @AppStorage("aces.campaign.selected") private var selectedMission = 1
     private var fighter: Fighter { Fighter(rawValue:selectedFighter) ?? .mustang }
     var body: some Scene {
         WindowGroup("Vector Aces") {
@@ -309,6 +310,7 @@ private struct AcesSettings: View {
                 Color(red:0.025,green:0.045,blue:0.077).ignoresSafeArea()
                 if started {
                     AcesGameWindow(fighter:fighter, mode:AcesPlayMode(rawValue:playMode) ?? .interception,
+                                   mission:AcesCampaignMission(rawValue:selectedMission) ?? .stukas,
                                    onHangar: { started = false })
                         .id(fighter)
                 } else {
@@ -355,16 +357,51 @@ private struct AcesSettings: View {
                                         .font(.system(size:11,weight:.bold,design:.monospaced))
                                         .foregroundStyle(AcesStyle.ice)
                                     Picker("Mission type",selection:$playMode) {
-                                        Text("Stop the Stukas").tag(AcesPlayMode.interception.rawValue)
+                                        Text("Campaign").tag(AcesPlayMode.interception.rawValue)
                                         Text("Endless Dogfight").tag(AcesPlayMode.endless.rawValue)
                                     }
                                     .labelsHidden().pickerStyle(.segmented)
                                     Text(playMode == AcesPlayMode.interception.rawValue
-                                         ? "MISSION 01 • DEFEND ALLIED AIRFIELD\nINTERCEPT SIX DIVE BOMBERS"
+                                         ? "CAMPAIGN • \((AcesCampaignMission(rawValue:selectedMission) ?? .stukas).title)"
                                          : "FREE FLIGHT • ENDLESS FORMATIONS")
                                         .font(.system(size:10,weight:.medium,design:.monospaced))
                                         .foregroundStyle(AcesStyle.amber)
                                         .fixedSize(horizontal:false,vertical:true)
+                                    if playMode == AcesPlayMode.interception.rawValue {
+                                        VStack(alignment:.leading,spacing:5) {
+                                            Text("CAMPAIGN MISSIONS").font(.system(size:10,weight:.bold,design:.monospaced))
+                                                .foregroundStyle(AcesStyle.ice)
+                                            ForEach(AcesCampaignMission.allCases) { mission in
+                                                Button {
+                                                    selectedMission = mission.rawValue
+                                                    CombatAudio.shared.play(.menu,volume:0.15)
+                                                } label: {
+                                                    HStack {
+                                                        Text(String(format:"%02d",mission.rawValue))
+                                                        Text(mission.title)
+                                                        Spacer()
+                                                        if AcesPilotLog.unlocked < mission.rawValue {
+                                                            Image(systemName:"lock.fill")
+                                                        } else if AcesPilotLog.stars(for:mission)>0 {
+                                                            Text(String(repeating:"★",count:AcesPilotLog.stars(for:mission)))
+                                                        }
+                                                    }
+                                                    .font(.system(size:10,weight:.bold,design:.monospaced))
+                                                    .foregroundStyle(selectedMission == mission.rawValue ? AcesStyle.amber : .white.opacity(0.7))
+                                                    .padding(.vertical,6)
+                                                }
+                                                .disabled(AcesPilotLog.unlocked < mission.rawValue)
+                                                .buttonStyle(.plain)
+                                            }
+                                            Text((AcesCampaignMission(rawValue:selectedMission) ?? .stukas).overview)
+                                                .font(.system(size:10,design:.monospaced))
+                                                .foregroundStyle(.white.opacity(0.66))
+                                                .fixedSize(horizontal:false,vertical:true)
+                                            Text("PILOT: \(AcesPilotLog.rank)  •  SORTIES \(UserDefaults.standard.integer(forKey:"aces.campaign.sorties"))")
+                                                .font(.system(size:10,weight:.bold,design:.monospaced))
+                                                .foregroundStyle(AcesStyle.ice)
+                                        }
+                                    }
                                     Text("SELECT AIRCRAFT").font(.system(size:12,weight:.bold,design:.monospaced))
                                         .tracking(2).foregroundStyle(AcesStyle.ice)
                                     ForEach(Fighter.allCases) { choice in
@@ -471,18 +508,20 @@ private struct AcesSettings: View {
 private struct AcesGameWindow: View {
     let fighter: Fighter
     let mode: AcesPlayMode
+    let mission: AcesCampaignMission
     let onHangar: () -> Void
     @AppStorage("aces.difficulty") private var difficulty = 1
     @AppStorage("aces.soundEnabled") private var soundEnabled = true
     @State private var showingCustom = false
     @State private var scene: AirBattleScene
 
-    init(fighter: Fighter, mode: AcesPlayMode, onHangar: @escaping () -> Void) {
+    init(fighter: Fighter, mode: AcesPlayMode, mission: AcesCampaignMission, onHangar: @escaping () -> Void) {
         self.fighter = fighter
         self.mode = mode
+        self.mission = mission
         self.onHangar = onHangar
         _scene = State(initialValue: AirBattleScene(
-            size: CGSize(width: 1200, height: 720), fighter: fighter, mode: mode))
+            size: CGSize(width: 1200, height: 720), fighter: fighter, mode: mode, mission: mission))
     }
     var body: some View {
         VStack(spacing:0) {
@@ -538,7 +577,7 @@ private struct AcesGameWindow: View {
                         }
                     }
                     Spacer()
-                    Text(fighter.rawValue.uppercased())
+                    Text(mode == .interception ? mission.title : fighter.rawValue.uppercased())
                         .font(.system(size:10,weight:.semibold,design:.monospaced))
                         .foregroundStyle(.cyan.opacity(0.73))
                     Button("Pause / Resume") { scene.togglePause() }
@@ -620,6 +659,7 @@ private final class AirBattleScene: SKScene {
     }
     private let fighter: Fighter
     private let playMode: AcesPlayMode
+    private let campaignMission: AcesCampaignMission
     private enum MissionStage { case briefing, active, success, failure }
     private var missionStage: MissionStage = .briefing
     private var missionTime: CGFloat = 0
@@ -694,9 +734,10 @@ private final class AirBattleScene: SKScene {
     private let sounds = CombatAudio.shared
     private let prefs = UserDefaults.standard
 
-    init(size: CGSize, fighter: Fighter, mode: AcesPlayMode) {
+    init(size: CGSize, fighter: Fighter, mode: AcesPlayMode, mission: AcesCampaignMission) {
         self.fighter = fighter
         self.playMode = mode
+        self.campaignMission = mission
         self.health = fighter.health
         self.ammo = fighter.ammunition
         super.init(size: size)
