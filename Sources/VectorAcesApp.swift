@@ -1460,86 +1460,160 @@ private final class AirBattleScene: SKScene {
         flash("INCOMING FORMATION — \(count) HOSTILES")
     }
     private func updateBandits(dt: CGFloat, scrolling: CGVector) {
-        // Four-state combat behavior: line up, attack, break away, and re-engage.
-        // Changing tactics prevents the old permanent "fly toward the player" behavior.
+        // Phase 2 AI: pilots maintain limited attack slots. Fighters lead,
+        // flank, make a firing pass and disengage rather than forming a swarm.
+        // Escorts initially screen their bomber group before breaking to engage.
+        let difficulty = max(0,min(2,prefs.integer(forKey:"aces.difficulty")))
+        let simultaneousAttacks = difficulty == 0 ? 1 : (difficulty == 1 ? 2 : 3)
+        let attacking = bandits.filter { !$0.missionBomber && $0.tactic == .attack }.count
+        var availableAttackSlots = max(0,simultaneousAttacks - attacking)
+
         for i in bandits.indices {
             var b = bandits[i]
             if b.missionBomber {
-                advanceMissionBomber(&b, dt:dt, scrolling:scrolling)
+                advanceMissionBomber(&b,dt:dt,scrolling:scrolling)
                 bandits[i] = b
                 continue
             }
             b.formationTime -= dt
             b.tacticTime -= dt
+            b.evadeCooldown = max(0,b.evadeCooldown-dt)
             b.fireCooldown -= dt
-            let dx = player.position.x - b.position.x
-            let dy = player.position.y - b.position.y
-            let distance = hypot(dx, dy)
-            let bearing = atan2(dy, dx)
-            let playerForward = CGVector(dx: cos(heading), dy: sin(heading))
-            let inRear = (b.position.x - player.position.x) * playerForward.dx +
-                         (b.position.y - player.position.y) * playerForward.dy < -45
+            let dx = player.position.x-b.position.x
+            let dy = player.position.y-b.position.y
+            let distance = hypot(dx,dy)
+            let bearing = atan2(dy,dx)
+            let forwardX = cos(heading)
+            let forwardY = sin(heading)
+            let playerBehind = cos(b.heading) * dx + sin(b.heading) * dy < -65
+            let playerAimingAtBandit = cos(heading) * (b.position.x-player.position.x) +
+                sin(heading) * (b.position.y-player.position.y) > 0
+            let playerAspect = abs(atan2(sin(bearing-heading),cos(bearing-heading)))
+            let underPursuit = playerBehind && playerAimingAtBandit &&
+                               playerAspect < 0.7 && distance < 390
 
+            let nearbyBomber = bandits.filter { $0.missionBomber &&
+                $0.flightID == b.flightID }.min {
+                hypot($0.position.x-b.position.x,$0.position.y-b.position.y) <
+                hypot($1.position.x-b.position.x,$1.position.y-b.position.y)
+            }
+            let escorting = b.role == .escort && nearbyBomber != nil
             if b.tactic == .formation && b.formationTime <= 0 {
-                b.tactic = .intercept
-                b.tacticTime = CGFloat.random(in: 0.7...1.6)
+                b.tactic = escorting ? .flank : .intercept
+                b.tacticTime = CGFloat.random(in:1.2...2.4)
             }
-            if b.tactic == .intercept && (distance < 330 || b.tacticTime <= 0) {
-                b.tactic = .attack
-                b.tacticTime = CGFloat.random(in: 2...3.4)
+            if underPursuit && b.tactic != .evade && b.evadeCooldown <= 0 &&
+               b.tactic != .formation && b.kind != 2 {
+                b.tactic = .evade
+                b.tacticTime = CGFloat.random(in:0.8...1.45)
+                b.evadeCooldown = CGFloat.random(in:4.5...7)
+                b.maneuverSign = Bool.random() ? 1 : -1
             }
-            if b.tactic == .attack && (distance < 100 || b.tacticTime <= 0) {
+            if b.tactic == .evade && b.tacticTime <= 0 {
                 b.tactic = .breakAway
-                b.tacticTime = CGFloat.random(in: 1.3...2.7)
+                b.tacticTime = CGFloat.random(in:1.0...1.8)
+            }
+            if b.tactic == .intercept && (distance < 500 || b.tacticTime <= 0) {
+                b.tactic = .flank
+                b.tacticTime = CGFloat.random(in:1.0...2.3)
+            }
+            if b.tactic == .flank && (b.tacticTime <= 0 || distance < 260) {
+                if availableAttackSlots > 0 && distance < 680 {
+                    b.tactic = .attack
+                    b.tacticTime = CGFloat.random(in:1.5...2.7)
+                    b.attackPasses += 1
+                    availableAttackSlots -= 1
+                } else {
+                    b.tacticTime = CGFloat.random(in:0.8...1.4)
+                }
+            }
+            if b.tactic == .attack && (distance < 115 || b.tacticTime <= 0) {
+                b.tactic = .breakAway
+                b.tacticTime = CGFloat.random(in:1.15...2.1)
                 b.maneuverSign = Bool.random() ? 1 : -1
             }
             if b.tactic == .breakAway && b.tacticTime <= 0 {
                 b.tactic = .regroup
-                b.tacticTime = CGFloat.random(in: 0.8...2)
+                b.tacticTime = CGFloat.random(in:1.2...2.2)
             }
-            if b.tactic == .regroup && (b.tacticTime <= 0 || distance > 470) {
-                b.tactic = .intercept
-                b.tacticTime = CGFloat.random(in: 0.6...1.3)
+            if b.tactic == .regroup && (b.tacticTime <= 0 || distance > 690) {
+                b.tactic = escorting ? .flank : .intercept
+                b.tacticTime = CGFloat.random(in:1.3...2.4)
             }
+
+            let leadTime = min(1.25,distance / 510)
+            let predictedX = dx + forwardX * airspeed * leadTime
+            let predictedY = dy + forwardY * airspeed * leadTime
+            let leadBearing = atan2(predictedY,predictedX)
             let desired: CGFloat
             switch b.tactic {
-            case .formation: desired = b.entryHeading
+            case .formation:
+                desired = b.entryHeading
             case .intercept:
-                // Lead the moving player instead of steering toward its present position.
-                let lead = min(1.05, distance / 450)
-                desired = atan2(dy + playerForward.dy * airspeed * lead,
-                                dx + playerForward.dx * airspeed * lead)
+                desired = leadBearing
+            case .flank:
+                if escorting, let bomber = nearbyBomber, distance > 290 {
+                    let flankX = bomber.position.x + (b.wingIndex == 0 ? -160 : 160)
+                    let flankY = bomber.position.y + 135
+                    desired = atan2(flankY-b.position.y,flankX-b.position.x)
+                } else {
+                    // Wingmen approach opposing flanks, forcing the player to
+                    // make an evasive choice while only a few pilots fire.
+                    let flankSign: CGFloat = b.wingIndex.isMultiple(of:2) ? 1 : -1
+                    desired = atan2(predictedY + flankSign * 135 * cos(heading),
+                                    predictedX - flankSign * 135 * sin(heading))
+                }
             case .attack:
-                desired = bearing + b.targetOffset * (inRear ? 0.12 : 0.32)
+                // Bf 109s make agile turning attacks, Fw 190s make faster passes.
+                desired = leadBearing + b.targetOffset * (b.kind == 1 ? 0.08 : 0.14)
+            case .evade:
+                // An abrupt hook away from the pursuing aircraft.
+                desired = b.heading + b.maneuverSign * (b.kind == 1 ? 1.2 : 0.95)
             case .breakAway:
-                // Keep moving, cross the opponent's flight path, then arc outward.
-                desired = b.heading + b.maneuverSign * 0.85
+                desired = b.heading + b.maneuverSign * (b.kind == 0 ? 0.62 : 0.90)
             case .regroup:
-                desired = bearing + b.maneuverSign * 1.3
+                if escorting, let bomber = nearbyBomber {
+                    desired = atan2(bomber.position.y-b.position.y,
+                                    bomber.position.x-b.position.x)
+                } else {
+                    desired = bearing + b.maneuverSign * 1.35
+                }
             }
-            let turnDelta = atan2(sin(desired - b.heading), cos(desired - b.heading))
-            let turnRate: CGFloat = b.kind == 2 ? 0.95 : (b.kind == 1 ? 2.25 : 1.85)
-            let boundedTurn = max(-turnRate * dt, min(turnRate * dt, turnDelta))
-            b.heading += boundedTurn
-            let speedGoal: CGFloat = b.tactic == .breakAway ? (b.kind == 2 ? 205 : 315)
-                                    : b.tactic == .formation ? (b.kind == 2 ? 160 : 230)
-                                    : (b.kind == 2 ? 170 : 255)
-            b.speed += max(-95 * dt, min(95 * dt, speedGoal - b.speed))
-            b.position.x += cos(b.heading) * b.speed * dt + scrolling.dx
-            b.position.y += sin(b.heading) * b.speed * dt + scrolling.dy
+
+            let turnRate: CGFloat = b.kind == 1 ? 2.45 : b.kind == 0 ? 1.85 : 1.05
+            let delta = atan2(sin(desired-b.heading),cos(desired-b.heading))
+            b.heading += max(-turnRate*dt,min(turnRate*dt,delta))
+            let speedGoal: CGFloat
+            switch b.tactic {
+            case .formation: speedGoal = b.kind == 2 ? 160 : 230
+            case .attack: speedGoal = b.kind == 0 ? 315 : 265
+            case .evade: speedGoal = b.kind == 0 ? 315 : 275
+            case .breakAway: speedGoal = b.kind == 0 ? 320 : 285
+            case .flank, .intercept: speedGoal = b.kind == 0 ? 275 : 250
+            case .regroup: speedGoal = 225
+            }
+            b.speed += max(-115*dt,min(115*dt,speedGoal-b.speed))
+            b.position.x += cos(b.heading)*b.speed*dt + scrolling.dx
+            b.position.y += sin(b.heading)*b.speed*dt + scrolling.dy
             b.sprite.position = b.position
-            b.sprite.zRotation = b.heading - .pi / 2
-            let aimError = abs(atan2(sin(bearing - b.heading), cos(bearing - b.heading)))
-            if b.tactic == .attack && b.fireCooldown <= 0 && distance < 440 && aimError < 0.19 {
-                fire(from: b.position, angle: b.heading, hostile: true)
-                sounds.play(.gun, volume:effectsVolume * 0.075)
-                b.fireCooldown = CGFloat.random(in: 0.9...1.75)
+            b.sprite.zRotation = b.heading - .pi/2
+
+            let aim = abs(atan2(sin(bearing-b.heading),cos(bearing-b.heading)))
+            let aimTolerance: CGFloat = difficulty == 0 ? 0.11 : difficulty == 1 ? 0.16 : 0.20
+            let shotRange: CGFloat = difficulty == 0 ? 340 : difficulty == 1 ? 395 : 435
+            if b.tactic == .attack && b.fireCooldown <= 0 &&
+               distance < shotRange && aim < aimTolerance {
+                fire(from:b.position,angle:b.heading,hostile:true)
+                sounds.play(.gun,volume:effectsVolume*0.075)
+                let cooldownBase: CGFloat = difficulty == 0 ? 2.6 :
+                    difficulty == 1 ? 1.75 : 1.35
+                b.fireCooldown = cooldownBase + CGFloat.random(in:0.1...0.65)
             }
             b.previousDistance = distance
             bandits[i] = b
         }
-        // Ensure aircraft departing the screen have time to circle back, but
-        // eventually despawn a runaway pursuit to cap difficulty and workload.
+        // Escaped bombers damage the defended airfield. Fighters have a larger
+        // turning arena and time to circle back, but cannot accumulate forever.
         for i in bandits.indices.reversed() {
             let b = bandits[i]
             if b.missionBomber {
@@ -1547,33 +1621,34 @@ private final class AirBattleScene: SKScene {
                     bomberEscaped += 1
                     airfieldHealth = max(0,airfieldHealth-1)
                     burst(at:airfield.position,count:26)
-                    sounds.play(.explosion,volume:effectsVolume * 0.65)
+                    sounds.play(.explosion,volume:effectsVolume*0.65)
                     b.sprite.removeFromParent()
                     bandits.remove(at:i)
-                    flash("AIRFIELD HIT  —  \(airfieldHealth) DEFENSE REMAINING")
+                    flash("AIRFIELD HIT — \(airfieldHealth) DEFENSE REMAINING")
                 }
                 continue
             }
-            if b.position.x < -900 || b.position.x > size.width + 900 ||
-               b.position.y < -900 || b.position.y > size.height + 900 {
+            if b.position.x < -1100 || b.position.x > size.width+1100 ||
+               b.position.y < -1100 || b.position.y > size.height+1100 {
                 b.sprite.removeFromParent()
-                bandits.remove(at: i)
-            } else if hypot(b.position.x - player.position.x,
-                            b.position.y - player.position.y) < 31 && gameTime > invulnerableUntil {
+                bandits.remove(at:i)
+            } else if hypot(b.position.x-player.position.x,
+                            b.position.y-player.position.y) < 31 &&
+                      gameTime > invulnerableUntil {
                 takeDamage()
             }
         }
-        // Screen-edge threat alert for an opponent closing in from behind.
+
         var rearThreat = false
-        for b in bandits {
-            let offsetX = b.position.x - player.position.x
-            let offsetY = b.position.y - player.position.y
-            let aft = offsetX * cos(heading) + offsetY * sin(heading)
-            let bearingToEnemy = atan2(offsetY, offsetX)
-            let relative = abs(atan2(sin(bearingToEnemy - heading), cos(bearingToEnemy - heading)))
-            if aft < -80 && relative > 2.4 && hypot(offsetX, offsetY) < 530 {
-                if gameTime - lastWarning > 4 {
-                    sounds.play(.warning,volume:effectsVolume * 0.3)
+        for b in bandits where !b.missionBomber {
+            let x = b.position.x-player.position.x
+            let y = b.position.y-player.position.y
+            let aft = x*cos(heading)+y*sin(heading)
+            let relative = abs(atan2(sin(atan2(y,x)-heading),
+                                     cos(atan2(y,x)-heading)))
+            if aft < -80 && relative > 2.4 && hypot(x,y) < 530 {
+                if gameTime-lastWarning > 4 {
+                    sounds.play(.warning,volume:effectsVolume*0.3)
                     lastWarning = gameTime
                 }
                 rearThreat = true
