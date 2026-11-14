@@ -1727,6 +1727,8 @@ private final class AirBattleScene: SKScene {
         let altitudeBand = altitude < 3500 ? "LOW" : altitude < 15000 ? "COMBAT" : "HIGH"
         let rate = Int(climbRate * 60)
         let engine = airframe <= 1 ? "CRITICAL" : airframe <= fighter.health / 2 ? "DAMAGED" : "NORMAL"
+        // Arcade power indication reflects current usable speed, not engine manifold pressure.
+        let power = Int(max(0,min(100,(airspeed - 105) / max(1,fighter.speed - 10) * 100)))
         let difficulty = ["ROOKIE","VETERAN","ACE"][min(2,max(0,prefs.integer(forKey:"aces.difficulty")))]
         let rows = [
             "VECTOR ACES  //  TELEMETRY",
@@ -1747,7 +1749,7 @@ private final class AirBattleScene: SKScene {
             "FLIGHT SYSTEMS",
             "\(fighter.rawValue.uppercased())",
             "HDG \(degrees)°  V/S \(rate >= 0 ? "+" : "")\(rate) FPM",
-            "\(altitudeBand) ALT  /  ENGINE \(engine)",
+            "\(altitudeBand) ALT  /  PWR \(power)%  /  \(engine)",
         ]
         for (i,label) in telemetryLines.enumerated() {
             label.text = rows[i]
