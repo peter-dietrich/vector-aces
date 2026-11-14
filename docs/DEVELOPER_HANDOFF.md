@@ -76,3 +76,14 @@
 - Mission results have an optional local best mission score. Free-flight saved games remain separate; Save/Resume toolbar is intentionally disabled during missions.
 - Telemetry remains in Vector Drift style; short mission objective status appears at the upper-left of the field during active flight.
 - **Must run macOS build and gameplay QA:** verify mission spawns, actual airfield intercepts, visible radar targeting, outcomes, restart, pause, and original endless game. Mission timing and difficulty are initial tuning values and should be adjusted after user playtest.
+
+## Phase 2 — Enemy dogfighting AI (November 13, 2026)
+- Added distinct flight roles: **interceptor (Bf 109)**, **hunter (Fw 190)**, **escort (mission Fw 190)**, and **bomber (Ju 87)**, with mission bomber objective behavior retained.
+- Fighters operate through formation, lead intercept, flank, firing pass, evade, breakaway and regroup. Squadron flight IDs and wing indices provide deterministic opposite-flank approaches within each group.
+- Escorts stay with their bomber group outside close-combat range, then maneuver and intercept the player while bombers continue the objective run.
+- Bf 109 has a higher turn rate and tighter maneuvering; Fw 190 favors faster firing passes. Ju 87 mission bombers retain their airfield run.
+- Fighters react defensively when player lines up a rear attack and to nonfatal bullet hits, with cooldowns to avoid constant evasive zig-zags.
+- Limit simultaneous attack slots by difficulty (Rookie 1, Veteran 2, Ace 3), adjust aim tolerances, range, and shot cooldowns; leave existing flight controls unchanged.
+- Radar, telemetry, terrain, audio, mission and endless modes are intended to remain operational.
+- Verify on Mac: can track a retreating Bf 109, see two Fw 190s flank rather than stack, observe evasive reactions after shooting, and complete Stop the Stukas despite escort pressure.
+- **Build verification must be checked for the final commit.** Previously an intermediate commit failed an exhaustive switch check after enum expansion; later updates replaced that switch. The Xcode build/mission balancing need verification.
