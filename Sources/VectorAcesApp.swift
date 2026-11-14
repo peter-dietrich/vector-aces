@@ -1467,24 +1467,28 @@ private final class AirBattleScene: SKScene {
         // energy tradeoffs: sustained climb costs speed, dives restore it.
         let verticalProfile: (climb: CGFloat, dive: CGFloat)
         switch fighter {
-        case .mustang: verticalProfile = (62,86)
-        case .thunderbolt: verticalProfile = (47,103)
-        case .lightning: verticalProfile = (57,90)
-        case .warhawk: verticalProfile = (54,81)
+        // Vertical rates are arcade-friendly: a 1,500 ft intercept requires
+        // seconds of committed climbing/diving, not half a mission.
+        case .mustang: verticalProfile = (166,224)
+        case .thunderbolt: verticalProfile = (145,247)
+        case .lightning: verticalProfile = (160,232)
+        case .warhawk: verticalProfile = (153,215)
         }
         let climbPerformance = verticalProfile.climb
         let divePerformance = verticalProfile.dive
         let verticalTarget: CGFloat = keys.contains(12) ? climbPerformance :
             keys.contains(14) ? -divePerformance : 0
-        climbRate += (verticalTarget - climbRate) * min(1, dt * 2.2)
+        climbRate += (verticalTarget - climbRate) * min(1, dt * 3.4)
         altitude = max(0, min(26000, altitude + climbRate * dt))
-        if thrust { airspeed += 160 * dt }
-        if brake { airspeed -= 190 * dt }
-        if climbRate > 5 { airspeed -= climbRate * 0.56 * dt }
-        if climbRate < -5 { airspeed += abs(climbRate) * 0.75 * dt }
+        // About 12% higher sustainable speed; a faster throttle response
+        // helps reach distant squadrons without turning flight into a blur.
+        if thrust { airspeed += 195 * dt }
+        if brake { airspeed -= 195 * dt }
+        if climbRate > 5 { airspeed -= climbRate * 0.23 * dt }
+        if climbRate < -5 { airspeed += abs(climbRate) * 0.32 * dt }
         if left || right { airspeed -= 15 * dt }
-        airspeed += (fighter.speed * 0.70 - airspeed) * dt * 0.18
-        let diveSpeedReserve: CGFloat = fighter == .thunderbolt ? 155 : 135
+        airspeed += (fighter.speed * 0.79 - airspeed) * dt * 0.16
+        let diveSpeedReserve: CGFloat = fighter == .thunderbolt ? 205 : 185
         airspeed = max(105, min(fighter.speed + diveSpeedReserve, airspeed))
         let speedReserve = max(0, min(100, (airspeed - 105) /
             max(1, fighter.speed + diveSpeedReserve - 105) * 100))
@@ -1754,8 +1758,10 @@ private final class AirBattleScene: SKScene {
         let launchIndex = bomberLaunched / 2
         let flightID = nextFlightID
         nextFlightID += 1
-        let base = CGPoint(x:airfield.position.x + 1650,
-                           y:airfield.position.y + CGFloat(launchIndex-1)*140)
+        // ~34 seconds from launch to target, versus ~14 seconds previously.
+        // All three waves enter well beyond the visible battlefield edge.
+        let base = CGPoint(x:airfield.position.x + 3650,
+                           y:airfield.position.y + CGFloat(launchIndex-1)*230)
         for i in 0..<2 {
             let point = CGPoint(x:base.x+CGFloat(i)*80,y:base.y+CGFloat(i)*135)
             let sprite = SKNode()
@@ -1768,7 +1774,7 @@ private final class AirBattleScene: SKScene {
             let toward = atan2(airfield.position.y-point.y,airfield.position.x-point.x)
             sprite.zRotation = toward - .pi/2
             var bomber = Bandit(sprite:sprite,position:point,heading:toward,
-                                speed:118,health:3,kind:2,
+                                speed:108,health:3,kind:2,
                                 formationTime:0,fireCooldown:100,
                                 targetOffset:0,tactic:.formation,tacticTime:0,
                                 maneuverSign:1,entryHeading:toward,
@@ -1776,7 +1782,9 @@ private final class AirBattleScene: SKScene {
             bomber.role = .bomber
             bomber.flightID = flightID
             bomber.wingIndex = i
-            bomber.altitude = 7450 - CGFloat(launchIndex) * 310
+            // Bombers enter near the pilot's combat altitude. Their descent
+            // happens gradually so Q/E remain tactical rather than mandatory.
+            bomber.altitude = 7600 - CGFloat(launchIndex) * 140
             bomber.sizeAtSpawn = sprite.xScale
             bandits.append(bomber)
             bomberLaunched += 1
@@ -1804,11 +1812,11 @@ private final class AirBattleScene: SKScene {
             escort.role = .escort
             escort.flightID = flightID
             escort.wingIndex = i
-            escort.altitude = 7600 - CGFloat(launchIndex) * 220
+            escort.altitude = 7700 - CGFloat(launchIndex) * 125
             escort.sizeAtSpawn = sprite.xScale
             bandits.append(escort)
         }
-        flash("MISSION ALERT  //  INBOUND STUKAS  \(bomberLaunched)/6")
+        flash("LONG-RANGE CONTACT  //  STUKAS INBOUND  \(bomberLaunched)/\(campaignMission == .bridge ? 8 : 6)")
     }
 
     private func updateMissionSpawns() {
@@ -1940,7 +1948,7 @@ private final class AirBattleScene: SKScene {
         b.heading += max(-0.48*dt,min(0.48*dt,difference))
         b.position.x += cos(b.heading)*b.speed*dt + scrolling.dx
         b.position.y += sin(b.heading)*b.speed*dt + scrolling.dy
-        b.altitude = max(1250, b.altitude - 47 * dt)
+        b.altitude = max(3200, b.altitude - 13 * dt)
         b.sprite.position = b.position
         b.sprite.zRotation = b.heading - .pi/2
         let visual = 1 + max(-0.12,min(0.10,(b.altitude-altitude)/6000))
@@ -2268,8 +2276,9 @@ private final class AirBattleScene: SKScene {
                 }
                 continue
             }
-            let maxX = size.width * battlefieldZoom * 0.5 + 1300
-            let maxY = size.height * battlefieldZoom * 0.5 + 1300
+            // Long-range escorts must not despawn before reaching the player.
+            let maxX = max(radarRange + 1000, size.width * battlefieldZoom * 0.5 + 1300)
+            let maxY = max(radarRange + 1000, size.height * battlefieldZoom * 0.5 + 1300)
             if abs(b.position.x-player.position.x) > maxX ||
                abs(b.position.y-player.position.y) > maxY {
                 b.sprite.removeFromParent()
@@ -2741,7 +2750,7 @@ private final class AirBattleScene: SKScene {
             altitude:altitude,
             verticalSpeed:climbRate,
             speed:airspeed,
-            topSpeed:fighter.speed+(fighter == .thunderbolt ? 155 : 135),
+            topSpeed:fighter.speed+(fighter == .thunderbolt ? 205 : 185),
             energy:flightEnergy,
             bank:bankAngle,
             health:health,
