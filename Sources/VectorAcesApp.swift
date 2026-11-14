@@ -1129,14 +1129,15 @@ private final class AirBattleScene: SKScene {
         bankAngle += (bankTarget - bankAngle) * min(1, dt * 3.6)
         // Q/E remain the only vertical controls. Arcade rates (ft/sec) and
         // energy tradeoffs: sustained climb costs speed, dives restore it.
-        let climbPerformance: CGFloat
-        let divePerformance: CGFloat
+        let verticalProfile: (climb: CGFloat, dive: CGFloat)
         switch fighter {
-        case .mustang: (climbPerformance,divePerformance) = (62,86)
-        case .thunderbolt: (climbPerformance,divePerformance) = (47,103)
-        case .lightning: (climbPerformance,divePerformance) = (57,90)
-        case .warhawk: (climbPerformance,divePerformance) = (54,81)
+        case .mustang: verticalProfile = (62,86)
+        case .thunderbolt: verticalProfile = (47,103)
+        case .lightning: verticalProfile = (57,90)
+        case .warhawk: verticalProfile = (54,81)
         }
+        let climbPerformance = verticalProfile.climb
+        let divePerformance = verticalProfile.dive
         let verticalTarget: CGFloat = keys.contains(12) ? climbPerformance :
             keys.contains(14) ? -divePerformance : 0
         climbRate += (verticalTarget - climbRate) * min(1, dt * 2.2)
