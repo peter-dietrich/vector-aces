@@ -490,6 +490,7 @@ private final class AirBattleScene: SKScene {
         var maneuverSign: CGFloat
         var entryHeading: CGFloat
         var previousDistance: CGFloat
+        var missionBomber: Bool = false
     }
     private struct Round {
         let sprite: SKShapeNode
@@ -500,6 +501,20 @@ private final class AirBattleScene: SKScene {
     }
     private let fighter: Fighter
     private let playMode: AcesPlayMode
+    private enum MissionStage { case briefing, active, success, failure }
+    private var missionStage: MissionStage = .briefing
+    private var missionTime: CGFloat = 0
+    private let missionLimit: CGFloat = 150
+    private var bomberLaunched = 0
+    private var bomberDestroyed = 0
+    private var bomberEscaped = 0
+    private var airfieldHealth = 3
+    private var missionEscortKills = 0
+    private var missionHitsTaken = 0
+    private let airfield = SKNode()
+    private let missionText = SKLabelNode(fontNamed:"Menlo-Bold")
+    private let missionBackdrop = SKShapeNode()
+    private let missionCopy = (0..<6).map { _ in SKLabelNode(fontNamed:"Menlo") }
     private var player = SKNode()
     private let playerArtwork = SKNode()
     private var keys = Set<UInt16>()
@@ -589,7 +604,12 @@ private final class AirBattleScene: SKScene {
         threat.zPosition = 101
         addChild(threat)
         installTelemetry()
-        if prefs.bool(forKey: "aces.resumeRequested") { loadRun() }
+        if playMode == .interception {
+            configureAirfield()
+            configureMissionOverlay()
+            showMissionBriefing()
+        }
+        if playMode == .endless && prefs.bool(forKey: "aces.resumeRequested") { loadRun() }
         prefs.set(false, forKey: "aces.resumeRequested")
         updateLabels()
         if prefs.object(forKey:"aces.soundEnabled") as? Bool ?? true {
@@ -598,7 +618,7 @@ private final class AirBattleScene: SKScene {
         view.window?.makeFirstResponder(self)
     }
     override func willMove(from view: SKView) {
-        if !gameOver && !deathStarted { saveRun() }
+        if playMode == .endless && !gameOver && !deathStarted { saveRun() }
         sounds.stopEngine()
     }
     override func didChangeSize(_ oldSize: CGSize) {
@@ -606,11 +626,17 @@ private final class AirBattleScene: SKScene {
         status.position = CGPoint(x: size.width / 2, y: size.height / 2 + 80)
         threat.position = CGPoint(x: size.width - 24, y: size.height - 233)
         layoutTelemetry()
+        layoutMissionOverlay()
         if player.position == .zero { player.position = CGPoint(x: size.width / 2, y: size.height / 2) }
     }
     override func keyDown(with event: NSEvent) {
         keys.insert(event.keyCode)
-        if event.keyCode == 35 && !event.isARepeat && !gameOver {
+        if playMode == .interception && event.keyCode == 36 && !event.isARepeat {
+            if missionStage == .briefing { beginMission(); return }
+            if missionStage == .success || missionStage == .failure { restart(); return }
+        }
+        if event.keyCode == 35 && !event.isARepeat && !gameOver &&
+           (playMode == .endless || missionStage == .active) {
             pausedGame.toggle()
             status.text = pausedGame ? "PAUSED — P TO RESUME" : ""
         }
@@ -1037,11 +1063,12 @@ private final class AirBattleScene: SKScene {
         if lastTime == 0 { lastTime = currentTime; return }
         let dt = CGFloat(min(currentTime - lastTime, 0.04))
         lastTime = currentTime
-        if pausedGame || gameOver { return }
-        if deathStarted { return }
+        if pausedGame || gameOver || deathStarted { return }
+        if playMode == .interception && missionStage != .active { return }
         gameTime += dt
-        if Int(gameTime) % 12 == 0 && Int(gameTime - dt) % 12 != 0 { saveRun() }
-        wave = max(1, prefs.integer(forKey: "aces.startWave")) + Int(gameTime / 36)
+        if playMode == .endless && Int(gameTime) % 12 == 0 && Int(gameTime - dt) % 12 != 0 { saveRun() }
+        if playMode == .endless { wave = max(1, prefs.integer(forKey: "aces.startWave")) + Int(gameTime / 36) }
+        else { wave = 1; missionTime += dt }
         let left = keys.contains(123) || keys.contains(0)
         let right = keys.contains(124) || keys.contains(2)
         let thrust = keys.contains(126) || keys.contains(13)
@@ -1102,12 +1129,17 @@ private final class AirBattleScene: SKScene {
             lastFire = gameTime
         }
         radarSweep += dt * 1.85
-        if gameTime - lastFormation > max(8, 13.5 - CGFloat(wave) * 0.35) / CGFloat(max(0.5, prefs.double(forKey: "aces.enemyDensity") == 0 ? 1 : prefs.double(forKey: "aces.enemyDensity"))) && bandits.count < 15 {
-            spawnFormation()
-            lastFormation = gameTime
+        if playMode == .endless {
+            if gameTime - lastFormation > max(8, 13.5 - CGFloat(wave) * 0.35) / CGFloat(max(0.5, prefs.double(forKey: "aces.enemyDensity") == 0 ? 1 : prefs.double(forKey: "aces.enemyDensity"))) && bandits.count < 15 {
+                spawnFormation()
+                lastFormation = gameTime
+            }
+        } else {
+            updateMissionSpawns()
         }
         updateBandits(dt: dt, scrolling: scroll)
         updateRounds(dt: dt, scrolling: scroll)
+        if playMode == .interception { evaluateMission() }
         // Give a reliable threat direction for attacks approaching outside the view.
         updateLabels()
     }
@@ -1156,6 +1188,11 @@ private final class AirBattleScene: SKScene {
         // Changing tactics prevents the old permanent "fly toward the player" behavior.
         for i in bandits.indices {
             var b = bandits[i]
+            if b.missionBomber {
+                advanceMissionBomber(&b, dt:dt, scrolling:scrolling)
+                bandits[i] = b
+                continue
+            }
             b.formationTime -= dt
             b.tacticTime -= dt
             b.fireCooldown -= dt
@@ -1229,6 +1266,18 @@ private final class AirBattleScene: SKScene {
         // eventually despawn a runaway pursuit to cap difficulty and workload.
         for i in bandits.indices.reversed() {
             let b = bandits[i]
+            if b.missionBomber {
+                if hypot(b.position.x-airfield.position.x,b.position.y-airfield.position.y) < 90 {
+                    bomberEscaped += 1
+                    airfieldHealth = max(0,airfieldHealth-1)
+                    burst(at:airfield.position,count:26)
+                    sounds.play(.explosion,volume:effectsVolume * 0.65)
+                    b.sprite.removeFromParent()
+                    bandits.remove(at:i)
+                    flash("AIRFIELD HIT  —  \(airfieldHealth) DEFENSE REMAINING")
+                }
+                continue
+            }
             if b.position.x < -900 || b.position.x > size.width + 900 ||
                b.position.y < -900 || b.position.y > size.height + 900 {
                 b.sprite.removeFromParent()
@@ -1319,7 +1368,11 @@ private final class AirBattleScene: SKScene {
                         if bandits[j].health <= 0 {
                             crashPlane(bandits[j].sprite, position: bandits[j].position, duration: 1.05)
                             sounds.play(.explosion, volume: effectsVolume * 0.65)
+                            let wasBomber = bandits[j].missionBomber
+                            let wasEscort = playMode == .interception && !wasBomber
                             bandits.remove(at: j)
+                            if wasBomber { bomberDestroyed += 1 }
+                            if wasEscort { missionEscortKills += 1 }
                             kills += 1
                             if gameTime < comboDeadline { hitCombo += 1 } else { hitCombo = 1 }
                             comboDeadline = gameTime + 3.6
@@ -1342,6 +1395,7 @@ private final class AirBattleScene: SKScene {
     private func takeDamage() {
         let difficulty = prefs.integer(forKey:"aces.difficulty")
         health -= difficulty == 2 ? 2 : 1
+        if playMode == .interception { missionHitsTaken += 1 }
         invulnerableUntil = gameTime + 0.75
         burst(at: player.position, count: 24)
         sounds.play(.hit, volume: effectsVolume * 0.45)
@@ -1376,10 +1430,10 @@ private final class AirBattleScene: SKScene {
         }]))
     }
     func saveNow() {
-        if !gameOver && !deathStarted { saveRun() }
+        if playMode == .endless && !gameOver && !deathStarted { saveRun() }
     }
     func resumeSavedSortie() {
-        guard prefs.bool(forKey:"aces.hasSave") else { return }
+        guard playMode == .endless && prefs.bool(forKey:"aces.hasSave") else { return }
         guard let saved = prefs.dictionary(forKey:"aces.savedRun") else { return }
         restart()
         prefs.set(saved,forKey:"aces.savedRun")
@@ -1393,7 +1447,8 @@ private final class AirBattleScene: SKScene {
         view?.window?.makeFirstResponder(self)
     }
     func togglePause() {
-        guard !gameOver && !deathStarted else { return }
+        guard !gameOver && !deathStarted &&
+              (playMode == .endless || missionStage == .active) else { return }
         pausedGame.toggle()
         status.text = pausedGame ? "PAUSED — P TO RESUME" : ""
         view?.window?.makeFirstResponder(self)
@@ -1487,9 +1542,13 @@ private final class AirBattleScene: SKScene {
         crashPlane(player,position:player.position,duration:1.65)
         run(.sequence([.wait(forDuration:1.7),.run { [weak self] in
             self?.gameOver = true
-            self?.prefs.set(false, forKey: "aces.hasSave")
-            self?.prefs.removeObject(forKey: "aces.savedRun")
-            self?.status.text = "SHOT DOWN — RETURN TO RESTART"
+            if self?.playMode == .interception {
+                self?.finishMission(success:false, reason:"AIRCRAFT LOST")
+            } else {
+                self?.prefs.set(false, forKey:"aces.hasSave")
+                self?.prefs.removeObject(forKey:"aces.savedRun")
+                self?.status.text = "SHOT DOWN — RETURN TO RESTART"
+            }
         }]))
     }
     private func shakeCamera() {
