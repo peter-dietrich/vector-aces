@@ -120,3 +120,10 @@
 - Original top SwiftUI header and bottom control footer retained. Gameplay and mission/Endless state unchanged; mission status moved to upper center for clearance.
 - Inspect Mac screenshots at 1000×670 minimum and full screen, tune HUD transparency and gauge sizing. Confirm radar, targets, mission progress and alerts are understandable visually.
 - **Important:** macOS CI build must be checked on latest commit; several intermediate commits failed Swift syntax and were repaired. Do not claim a passing build until latest successful check.
+
+## HUD visual polish from first in-game screenshot (Nov 14, 2026)
+- Screenshot showed working left flight gauges and right combat widgets, but target values, compass, and kill/contact readouts were visually crowded.
+- Combat header now separates score caption, score, wave, kill count, contact count, and lower target/delta information, with divider rules and slightly smaller target compass.
+- Mission widget now uses compact names (M1/STUKAS etc.) rather than overflowing campaign titles, and tightened progress, objective shield, and countdown spacing.
+- Left altimeter, vertical speed and cloud-cover annotations aligned/shortened to avoid crowding near the flight panel edge.
+- Continue comparing live screenshots at minimum and typical macOS window sizes. Review text overlaps when contacts and objective values change during a sortie, not only the briefing.
