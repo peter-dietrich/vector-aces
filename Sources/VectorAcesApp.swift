@@ -812,7 +812,7 @@ private final class AirBattleScene: SKScene {
     private let telemetryLines = (0..<19).map { _ in SKLabelNode(fontNamed: "Menlo-Bold") }
     private let telemetryAccent = SKShapeNode()
     private let telemetryRules = (0..<3).map { _ in SKShapeNode() }
-    private let radarRange: CGFloat = 2400 // World-space arcade units; about 4.5x the old range.
+    private let radarRange: CGFloat = 8500 // Mission-wide scope keeps incoming bomber flights visible.
     private let radarPanel = SKShapeNode()
     private let radarContacts = SKNode()
     private let radarLegend = SKLabelNode(fontNamed:"Menlo-Bold")
@@ -2758,7 +2758,13 @@ private final class AirBattleScene: SKScene {
             heading:heading,
             cloud:cloudCover)
         leftFlightHUD.render(snapshot)
-        let nearest=bandits.min(by: {
+        // During an airfield/bridge defense, explicitly prioritize the closest
+        // attacking bomber instead of the often-closer Fw 190 escort.
+        let defensiveMission = playMode == .interception &&
+            (campaignMission == .stukas || campaignMission == .bridge)
+        let missionBombers = bandits.filter { $0.missionBomber }
+        let targetCandidates = defensiveMission && !missionBombers.isEmpty ? missionBombers : bandits
+        let nearest=targetCandidates.min(by: {
             hypot($0.position.x-player.position.x,$0.position.y-player.position.y) <
             hypot($1.position.x-player.position.x,$1.position.y-player.position.y)
         })
@@ -3326,7 +3332,7 @@ private final class RightCombatHUDNode: SKNode {
                            color:AcesHUDVisual.amber,parent:self)
         AcesHUDVisual.text("MISSION / OBJECTIVE",at:CGPoint(x:14,y:-340),
                            color:AcesHUDVisual.amber,parent:self)
-        AcesHUDVisual.text("RADAR / 2400",at:CGPoint(x:14,y:-475),
+        AcesHUDVisual.text("RADAR / LONG RANGE",at:CGPoint(x:14,y:-475),
                            color:AcesHUDVisual.amber,parent:self)
         scoreCaption.text="SCORE"
         scoreCaption.position=CGPoint(x:15,y:-46)
@@ -3485,7 +3491,7 @@ private final class RightCombatHUDNode: SKNode {
         radarLabel.fontSize=10
         radarLabel.fontColor=AcesHUDVisual.muted
         radarLabel.horizontalAlignmentMode = .right
-        radarLabel.text="2,400 UNITS"
+        radarLabel.text="8,500 UNITS"
         addChild(radarLabel)
     }
 
@@ -3506,7 +3512,7 @@ private final class RightCombatHUDNode: SKNode {
         if v.rearThreat {
             threatRing.alpha=0.35+0.65*(0.5+0.5*sin(time*9))
         }
-        targetInfo.text=v.targetRange.map { "TARGET  \(Int($0))" } ?? "NO TARGET"
+        targetInfo.text=v.targetRange.map { "TARGET  \(Int($0))" } ?? "SCANNING"
         if let delta=v.targetAltitudeDelta {
             let alt=String(format:"%+.0f",delta)
             targetDelta.text="Δ \(alt) FT"
@@ -3543,11 +3549,12 @@ private final class RightCombatHUDNode: SKNode {
         if time-lastRadarUpdate < 0.045 { return }
         lastRadarUpdate=time
         radarContacts.removeAllChildren()
+        // Mission threats are never silently dropped: contacts outside the
+        // nominal scope stay indicated on the outer ring in their true bearing.
         for contact in v.contacts.prefix(65) {
             let range=hypot(contact.lateral,contact.forward)
-            guard range <= v.radarRange else { continue }
-            let normalized=range / v.radarRange
-            let radial=88 * pow(normalized,0.77)
+            let normalized=min(1,range / v.radarRange)
+            let radial=88 * pow(normalized,0.68)
             let x=range>0 ? contact.lateral/range*radial : 0
             let y=range>0 ? contact.forward/range*radial : 0
             let color:SKColor = contact.objective ? .green :
@@ -3563,11 +3570,14 @@ private final class RightCombatHUDNode: SKNode {
             blip.position=CGPoint(x:x,y:y)
             blip.fillColor=color
             blip.strokeColor = .clear
-            blip.glowWidth=contact.ace ? 3.5 : 1.5
+            blip.glowWidth=contact.ace || contact.bomber ? 3.5 : 1.5
             let angle=atan2(x,y)
             let diff=(v.radarSweep-angle).truncatingRemainder(dividingBy:2 * .pi)
             let lag=diff<0 ? diff+2 * .pi : diff
-            blip.alpha=(0.25+0.75*exp(-lag*0.45))*(1-0.35*normalized)
+            // Active mission contacts must remain on radar even when the
+            // cosmetic sweep has passed them; sweep only modulates brightness.
+            let baseline:CGFloat = contact.bomber ? 0.82 : contact.ally ? 0.68 : 0.50
+            blip.alpha = baseline + (1-baseline)*exp(-lag*0.45)
             radarContacts.addChild(blip)
         }
     }
