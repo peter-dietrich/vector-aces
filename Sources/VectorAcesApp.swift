@@ -1713,14 +1713,30 @@ private final class AirBattleScene: SKScene {
 
     private func evaluateMission() {
         guard missionStage == .active else { return }
-        if airfieldHealth <= 0 {
-            finishMission(success:false,reason:"AIRFIELD DESTROYED")
-        } else if missionTime >= missionLimit {
-            finishMission(success:false,reason:"INTERCEPTION WINDOW EXPIRED")
-        } else if bomberLaunched == 6 && bomberDestroyed+bomberEscaped >= 6 {
-            finishMission(success:bomberDestroyed >= 4,
-                          reason:bomberDestroyed >= 4 ?
-                            "AIRFIELD SECURED" : "TOO MANY BOMBERS GOT THROUGH")
+        switch campaignMission {
+        case .stukas, .bridge:
+            let total = campaignMission == .stukas ? 6 : 8
+            let required = campaignMission == .stukas ? 4 : 5
+            if airfieldHealth <= 0 {
+                finishMission(success:false,reason:"OBJECTIVE DESTROYED")
+            } else if bomberLaunched >= total && bomberDestroyed+bomberEscaped >= total {
+                let won = bomberDestroyed >= required
+                finishMission(success:won,reason:won ? "OBJECTIVE SECURED" : "BOMBERS BROKE THROUGH")
+            } else if missionTime >= campaignMission.duration {
+                finishMission(success:false,reason:"INTERCEPTION WINDOW EXPIRED")
+            }
+        case .escort:
+            if allyHealth.filter({$0>0}).count < 2 {
+                finishMission(success:false,reason:"ALLIED BOMBERS LOST")
+            } else if missionTime >= campaignMission.duration {
+                finishMission(success:true,reason:"FORMATION REACHED SAFETY")
+            }
+        case .ace:
+            if eliteDown {
+                finishMission(success:true,reason:"ENEMY ACE SHOT DOWN")
+            } else if missionTime >= campaignMission.duration {
+                finishMission(success:false,reason:"ACE ESCAPED")
+            }
         }
     }
 
@@ -1731,16 +1747,18 @@ private final class AirBattleScene: SKScene {
         pausedGame = false
         keys.removeAll()
         sounds.stopEngine()
-        if success { score += airfieldHealth*400 + Int(max(0,missionLimit-missionTime))*12 }
-        let rating = success ? (airfieldHealth == 3 ? "THREE STARS" :
-                              airfieldHealth == 2 ? "TWO STARS" : "ONE STAR") : "MISSION FAILED"
+        if success { score += 500 + Int(max(0,campaignMission.duration-missionTime))*10 + airfieldHealth*250 }
+        let stars = !success ? 0 : (missionHitsTaken == 0 ? 3 : missionHitsTaken <= 2 ? 2 : 1)
+        let awards = AcesPilotLog.record(mission:campaignMission,victory:success,
+                    score:score,kills:max(0,kills-campaignKillsAtStart),
+                    stars:stars,damage:missionHitsTaken)
         let lines = [
             success ? "MISSION COMPLETE  //  VICTORY" : "MISSION FAILED  //  RETREAT",
             reason,
-            "STUKAS DESTROYED  \(bomberDestroyed)/6   /   ESCAPED  \(bomberEscaped)",
-            "AIRFIELD INTEGRITY  \(airfieldHealth)/3   /   ESCORTS DOWN  \(missionEscortKills)",
-            "DAMAGE TAKEN  \(missionHitsTaken)   /   SCORE  \(score)",
-            "\(rating)  •  RETURN TO RETRY"
+            "MISSION \(campaignMission.rawValue)  /  \(campaignMission.title)",
+            "HOSTILES DOWN \(max(0,kills-campaignKillsAtStart))  /  DAMAGE TAKEN \(missionHitsTaken)",
+            "TOTAL SCORE  \(score)  /  RANK  \(AcesPilotLog.rank)",
+            "\(stars) STAR MISSION  •  \(awards.first ?? "RETURN TO RETRY")"
         ]
         missionBackdrop.isHidden = false
         for (label,line) in zip(missionCopy,lines) {
@@ -1749,7 +1767,7 @@ private final class AirBattleScene: SKScene {
         }
         missionText.text = ""
         status.text = ""
-        if success {
+        if success && campaignMission == .stukas {
             let best = prefs.integer(forKey:"aces.mission01Best")
             if score > best { prefs.set(score,forKey:"aces.mission01Best") }
         }
@@ -2098,9 +2116,11 @@ private final class AirBattleScene: SKScene {
                             crashPlane(bandits[j].sprite, position: bandits[j].position, duration: 1.05)
                             sounds.play(.explosion, volume: effectsVolume * 0.65)
                             let wasBomber = bandits[j].missionBomber
+                            let wasElite = bandits[j].attackPasses < -90
                             let wasEscort = playMode == .interception && !wasBomber
                             bandits.remove(at: j)
                             if wasBomber { bomberDestroyed += 1 }
+                            if wasElite { eliteDown = true }
                             if wasEscort { missionEscortKills += 1 }
                             kills += 1
                             if gameTime < comboDeadline { hitCombo += 1 } else { hitCombo = 1 }
