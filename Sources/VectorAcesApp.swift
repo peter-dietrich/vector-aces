@@ -304,7 +304,7 @@ private struct AcesSettings: View {
                                 VStack(alignment:.leading,spacing:12) {
                                     HStack {
                                         VStack(alignment:.leading,spacing:4) {
-                                            Text(mode == .interception ? "MISSION 01  /  STOP THE STUKAS" : fighter.rawValue.uppercased())
+                                            Text(fighter.rawValue.uppercased())
                                                 .font(.system(size:24,weight:.black,design:.monospaced))
                                             Text(fighter.role)
                                                 .font(.system(size:11,weight:.semibold,design:.monospaced))
