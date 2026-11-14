@@ -65,3 +65,14 @@
 - Real-world yards are intentionally **not** claimed: units represent simulated game-world distance.
 - Existing attitude instrument and radar remain below the telemetry section; gameplay and top/bottom header/footer controls remain unchanged.
 - Validate that the right-side instruments remain legible at the minimum scene/window size; radar and telemetry only compile-tested by CI, not runtime/visual-tested.
+
+## Mission gameplay — Phase 1 (November 13, 2026)
+- Hangar now has **Stop the Stukas** (default) and **Endless Dogfight** mode selection; Endless remains the previous arcade loop.
+- Mission 01 briefing is shown over the field. Press **Return** to launch; key controls otherwise unchanged.
+- Airfield is a distinct runway/hangar target anchored to the scrolling terrain, shown as a green square on radar.
+- Six Ju 87 Stukas spawn as three scheduled pairs at approximately 2s, 30s, and 58s and pursue the allied airfield; escorted by Fw 190s that engage the player.
+- Each Stuka reaching the airfield consumes one of three airfield defense points; the player must shoot down at least four of six before the time expires (150s) while retaining at least one airfield defense point.
+- Mission ends in a clear victory/failure debrief, showing bomber kills/escapes, damage, escorts, score, and star outcome. Return retries after a result.
+- Mission results have an optional local best mission score. Free-flight saved games remain separate; Save/Resume toolbar is intentionally disabled during missions.
+- Telemetry remains in Vector Drift style; short mission objective status appears at the upper-left of the field during active flight.
+- **Must run macOS build and gameplay QA:** verify mission spawns, actual airfield intercepts, visible radar targeting, outcomes, restart, pause, and original endless game. Mission timing and difficulty are initial tuning values and should be adjusted after user playtest.
