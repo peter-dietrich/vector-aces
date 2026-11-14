@@ -773,6 +773,9 @@ private final class AirBattleScene: SKScene {
     private var nextFlightID = 1
     private var rounds: [Round] = []
     private var effects: [SKNode] = []
+    // Scale only the battlefield; instruments and mission text stay crisp.
+    private let battlefieldZoom: CGFloat = 3.2
+    private let battlefield = SKNode()
     private var environment = SKNode()
     private var terrainTiles: [String: SKSpriteNode] = [:]
     private var terrainOffset = CGPoint.zero
@@ -842,15 +845,19 @@ private final class AirBattleScene: SKScene {
     override var acceptsFirstResponder: Bool { true }
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.16, green: 0.31, blue: 0.32, alpha: 1)
-        addChild(environment)
+        battlefield.zPosition = 0
+        addChild(battlefield)
+        layoutBattlefield()
+        battlefield.addChild(environment)
         buildGround()
         player.position = CGPoint(x: size.width / 2, y: size.height / 2)
         player.zPosition = 20
         playerArtwork.addChild(drawAircraft(kind: -1, color: fighter.color))
         player.addChild(playerArtwork)
         player.zRotation = heading - .pi / 2
-        player.setScale(0.9)
-        addChild(player)
+        // Keep planes distinguishable after exposing a 3.2x larger world.
+        player.setScale(0.9 * 2.0)
+        battlefield.addChild(player)
         hud.fontSize = 14
         hud.horizontalAlignmentMode = .left
         hud.verticalAlignmentMode = .top
@@ -897,6 +904,7 @@ private final class AirBattleScene: SKScene {
         threat.position = CGPoint(x: size.width - 24, y: size.height - 233)
         layoutTelemetry()
         layoutGraphicalHUD()
+        layoutBattlefield()
         layoutMissionOverlay()
         tacticalCue.position = CGPoint(x: 23, y: size.height - 65)
         if player.position == .zero { player.position = CGPoint(x: size.width / 2, y: size.height / 2) }
@@ -1112,6 +1120,15 @@ private final class AirBattleScene: SKScene {
         roundel.position = CGPoint(x:-76,y:-12)
         node.addChild(roundel)
         return node
+    }
+
+    private func layoutBattlefield() {
+        // World physics remain in the same coordinates: only visual projection
+        // changes. No changes needed to lead aiming, bullets, or collision math.
+        let scale: CGFloat = 1 / battlefieldZoom
+        battlefield.setScale(scale)
+        battlefield.position = CGPoint(x:size.width*(1-scale)*0.5,
+                                       y:size.height*(1-scale)*0.5)
     }
 
     private func buildGround() {
@@ -1404,6 +1421,10 @@ private final class AirBattleScene: SKScene {
         if lastTime == 0 { lastTime = currentTime; return }
         let dt = CGFloat(min(currentTime - lastTime, 0.04))
         lastTime = currentTime
+        if playMode == .interception && missionStage == .briefing {
+            updateTerrainTiles()
+            return
+        }
         if pausedGame || gameOver || deathStarted { return }
         if playMode == .interception && missionStage != .active { return }
         gameTime += dt
@@ -1719,7 +1740,7 @@ private final class AirBattleScene: SKScene {
             sprite.addChild(drawAircraft(kind:2,color:SKColor(
                 red:0.43,green:0.45,blue:0.33,alpha:1)))
             sprite.setScale(1.04)
-            addChild(sprite)
+            battlefield.addChild(sprite)
             let toward = atan2(airfield.position.y-point.y,airfield.position.x-point.x)
             sprite.zRotation = toward - .pi/2
             var bomber = Bandit(sprite:sprite,position:point,heading:toward,
@@ -1746,7 +1767,7 @@ private final class AirBattleScene: SKScene {
             sprite.addChild(drawAircraft(kind:0,color:SKColor(
                 red:0.45,green:0.47,blue:0.43,alpha:1)))
             sprite.setScale(0.86)
-            addChild(sprite)
+            battlefield.addChild(sprite)
             let toward = atan2(player.position.y-point.y,player.position.x-point.x)
             sprite.zRotation = toward - .pi/2
             var escort = Bandit(sprite:sprite,position:point,heading:toward,
@@ -1813,7 +1834,7 @@ private final class AirBattleScene: SKScene {
             node.addChild(aircraft)
             node.setScale(0.64)
             node.zRotation = -.pi/2
-            addChild(node)
+            battlefield.addChild(node)
             allies.append(node)
             allyHealth.append(3)
         }
@@ -1863,7 +1884,7 @@ private final class AirBattleScene: SKScene {
                 SKColor(red:0.72,green:0.24,blue:0.20,alpha:1) :
                 SKColor(red:0.44,green:0.47,blue:0.43,alpha:1)))
             sprite.setScale(elite && i == 0 ? 1.12 : 0.88)
-            addChild(sprite)
+            battlefield.addChild(sprite)
             let direction = atan2(player.position.y-point.y,player.position.x-point.x)
             sprite.zRotation = direction - .pi/2
             var enemy = Bandit(sprite:sprite,position:point,heading:direction,
@@ -1996,7 +2017,7 @@ private final class AirBattleScene: SKScene {
             let color = kind == 2 ? SKColor(red: 0.43, green: 0.45, blue: 0.33, alpha: 1) : SKColor(red: 0.45, green: 0.47, blue: 0.43, alpha: 1)
             sprite.addChild(drawAircraft(kind: kind, color: color))
             sprite.setScale((kind == 2 ? 1.17 : kind == 1 ? 0.87 : 0.96) * 0.9)
-            addChild(sprite)
+            battlefield.addChild(sprite)
             var pilot = Bandit(sprite: sprite, position: location, heading: toward,
                                speed: kind == 2 ? 150 : CGFloat.random(in: 180...240),
                                health: kind == 2 ? 5 : (wave >= 3 ? 3 : 2), kind: kind,
@@ -2275,7 +2296,8 @@ private final class AirBattleScene: SKScene {
         round.position = CGPoint(x: origin.x + cos(angle) * (42 + forward) - sin(angle) * lateral,
                                  y: origin.y + sin(angle) * (42 + forward) + cos(angle) * lateral)
         round.zPosition = 22
-        addChild(round)
+        round.setScale(1.8)
+        battlefield.addChild(round)
         let speed: CGFloat = hostile ? 420 : 790
         rounds.append(Round(sprite:round, position:round.position,
                             velocity:CGVector(dx:cos(angle)*speed,dy:sin(angle)*speed),
@@ -2369,7 +2391,7 @@ private final class AirBattleScene: SKScene {
             dot.fillColor = Bool.random() ? .orange : .yellow
             dot.strokeColor = .clear
             dot.zPosition = 40
-            addChild(dot)
+            battlefield.addChild(dot)
             dot.run(.sequence([.group([
                 .moveBy(x: CGFloat.random(in: -75...75), y: CGFloat.random(in: -75...75), duration: 0.4),
                 .fadeOut(withDuration: 0.4)
@@ -2603,7 +2625,8 @@ private final class AirBattleScene: SKScene {
             dash.lineWidth = 1.2
             leadCue.addChild(dash)
         }
-        addChild(leadCue)
+        leadCue.setScale(2.2)
+        battlefield.addChild(leadCue)
     }
 
     private func updateLeadCue() {
@@ -2798,8 +2821,8 @@ private final class AirBattleScene: SKScene {
         health = fighter.health
         deathStarted = false
         player.removeAllActions()
-        if player.parent == nil { addChild(player) }
-        player.setScale(0.9)
+        if player.parent == nil { battlefield.addChild(player) }
+        player.setScale(0.9 * 2.0)
         playerArtwork.xScale = 1
         playerArtwork.yScale = 1
         playerArtwork.position.x = 0
