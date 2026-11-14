@@ -1147,9 +1147,12 @@ private final class AirBattleScene: SKScene {
             for cluster in 0..<7 {
                 let spread = CGFloat(cluster - 3)
                 let drift = CGFloat(bank) * 350
-                let x = CGFloat.random(in: -210...210) + drift + spread * 155
-                let y = CGFloat.random(in: -95...95) + CGFloat(bank) * 290 +
-                        spread * (bank % 2 == 0 ? 48 : -65)
+                let viewWidth = size.width * battlefieldZoom
+                let viewHeight = size.height * battlefieldZoom
+                let x = size.width * 0.5 + CGFloat.random(in:-viewWidth*0.50...viewWidth*0.50) +
+                        drift * 0.12 + spread * 48
+                let y = size.height * 0.5 + CGFloat.random(in:-viewHeight*0.50...viewHeight*0.50) +
+                        CGFloat(bank) * 24 + spread * (bank % 2 == 0 ? 16 : -16)
                 let cloud = SKSpriteNode(texture: shapes[(bank + cluster) % shapes.count])
                 let scale = CGFloat.random(in: 0.68...1.45)
                 cloud.size = CGSize(width: 450 * scale, height: 200 * scale)
@@ -1533,10 +1536,21 @@ private final class AirBattleScene: SKScene {
             if node.name == "cloud" || node.name == "shadow" {
                 let wind: CGFloat = 8 * dt
                 node.position.x += wind
-                if node.position.x < -460 { node.position.x += size.width + 980 }
-                if node.position.x > size.width + 480 { node.position.x -= size.width + 980 }
-                if node.position.y < -330 { node.position.y += size.height + 640 }
-                if node.position.y > size.height + 330 { node.position.y -= size.height + 640 }
+                let worldWidth = size.width * battlefieldZoom
+                let worldHeight = size.height * battlefieldZoom
+                let margin: CGFloat = 310
+                if node.position.x < player.position.x - worldWidth*0.5 - margin {
+                    node.position.x += worldWidth + 2*margin
+                }
+                if node.position.x > player.position.x + worldWidth*0.5 + margin {
+                    node.position.x -= worldWidth + 2*margin
+                }
+                if node.position.y < player.position.y - worldHeight*0.5 - margin {
+                    node.position.y += worldHeight + 2*margin
+                }
+                if node.position.y > player.position.y + worldHeight*0.5 + margin {
+                    node.position.y -= worldHeight + 2*margin
+                }
             }
         }
         cloudCover = coveredByCloud(player.position, altitude: altitude)
@@ -1749,7 +1763,7 @@ private final class AirBattleScene: SKScene {
             sprite.zPosition = 15
             sprite.addChild(drawAircraft(kind:2,color:SKColor(
                 red:0.43,green:0.45,blue:0.33,alpha:1)))
-            sprite.setScale(1.04)
+            sprite.setScale(1.04 * 1.9)
             battlefield.addChild(sprite)
             let toward = atan2(airfield.position.y-point.y,airfield.position.x-point.x)
             sprite.zRotation = toward - .pi/2
@@ -1776,7 +1790,7 @@ private final class AirBattleScene: SKScene {
             sprite.zPosition = 15
             sprite.addChild(drawAircraft(kind:0,color:SKColor(
                 red:0.45,green:0.47,blue:0.43,alpha:1)))
-            sprite.setScale(0.86)
+            sprite.setScale(0.86 * 1.9)
             battlefield.addChild(sprite)
             let toward = atan2(player.position.y-point.y,player.position.x-point.x)
             sprite.zRotation = toward - .pi/2
@@ -1842,7 +1856,7 @@ private final class AirBattleScene: SKScene {
             node.zPosition = 16
             let aircraft = drawAlliedB17()
             node.addChild(aircraft)
-            node.setScale(0.64)
+            node.setScale(0.64 * 1.9)
             node.zRotation = -.pi/2
             battlefield.addChild(node)
             allies.append(node)
@@ -1893,7 +1907,7 @@ private final class AirBattleScene: SKScene {
             sprite.addChild(drawAircraft(kind:kind,color:elite && i == 0 ?
                 SKColor(red:0.72,green:0.24,blue:0.20,alpha:1) :
                 SKColor(red:0.44,green:0.47,blue:0.43,alpha:1)))
-            sprite.setScale(elite && i == 0 ? 1.12 : 0.88)
+            sprite.setScale((elite && i == 0 ? 1.12 : 0.88) * 1.9)
             battlefield.addChild(sprite)
             let direction = atan2(player.position.y-point.y,player.position.x-point.x)
             sprite.zRotation = direction - .pi/2
@@ -1999,11 +2013,24 @@ private final class AirBattleScene: SKScene {
         let count = min(3 + wave / 2, 6)
         let edge = Int.random(in: 0..<4)
         let center: CGPoint
+        // New squadrons enter just beyond the *zoomed* battlefield edge.
+        // They appear on screen and radar early enough for interception.
+        let halfW = size.width * battlefieldZoom * 0.5
+        let halfH = size.height * battlefieldZoom * 0.5
+        let margin: CGFloat = 180
         switch edge {
-        case 0: center = CGPoint(x: -120, y: CGFloat.random(in: 110...(size.height - 100)))
-        case 1: center = CGPoint(x: size.width + 120, y: CGFloat.random(in: 110...(size.height - 100)))
-        case 2: center = CGPoint(x: CGFloat.random(in: 100...(size.width - 100)), y: -120)
-        default: center = CGPoint(x: CGFloat.random(in: 100...(size.width - 100)), y: size.height + 120)
+        case 0:
+            center = CGPoint(x:player.position.x-halfW-margin,
+                             y:player.position.y+CGFloat.random(in:-halfH*0.8...halfH*0.8))
+        case 1:
+            center = CGPoint(x:player.position.x+halfW+margin,
+                             y:player.position.y+CGFloat.random(in:-halfH*0.8...halfH*0.8))
+        case 2:
+            center = CGPoint(x:player.position.x+CGFloat.random(in:-halfW*0.8...halfW*0.8),
+                             y:player.position.y-halfH-margin)
+        default:
+            center = CGPoint(x:player.position.x+CGFloat.random(in:-halfW*0.8...halfW*0.8),
+                             y:player.position.y+halfH+margin)
         }
         let toward = atan2(player.position.y - center.y, player.position.x - center.x)
         let kind = Int.random(in: 0...(wave >= 3 ? 2 : 1))
@@ -2026,7 +2053,7 @@ private final class AirBattleScene: SKScene {
             sprite.zPosition = 15
             let color = kind == 2 ? SKColor(red: 0.43, green: 0.45, blue: 0.33, alpha: 1) : SKColor(red: 0.45, green: 0.47, blue: 0.43, alpha: 1)
             sprite.addChild(drawAircraft(kind: kind, color: color))
-            sprite.setScale((kind == 2 ? 1.17 : kind == 1 ? 0.87 : 0.96) * 0.9)
+            sprite.setScale((kind == 2 ? 1.17 : kind == 1 ? 0.87 : 0.96) * 0.9 * 1.9)
             battlefield.addChild(sprite)
             var pilot = Bandit(sprite: sprite, position: location, heading: toward,
                                speed: kind == 2 ? 150 : CGFloat.random(in: 180...240),
@@ -2241,8 +2268,10 @@ private final class AirBattleScene: SKScene {
                 }
                 continue
             }
-            if b.position.x < -1100 || b.position.x > size.width+1100 ||
-               b.position.y < -1100 || b.position.y > size.height+1100 {
+            let maxX = size.width * battlefieldZoom * 0.5 + 1300
+            let maxY = size.height * battlefieldZoom * 0.5 + 1300
+            if abs(b.position.x-player.position.x) > maxX ||
+               abs(b.position.y-player.position.y) > maxY {
                 b.sprite.removeFromParent()
                 bandits.remove(at:i)
             } else if abs(b.altitude-altitude) < 350 &&
