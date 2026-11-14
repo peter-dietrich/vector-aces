@@ -510,6 +510,9 @@ private final class AirBattleScene: SKScene {
         var wingIndex: Int = 0
         var evadeCooldown: CGFloat = 0
         var attackPasses: Int = 0
+        var altitude: CGFloat = 7600
+        var climbVelocity: CGFloat = 0
+        var sizeAtSpawn: CGFloat = 1
     }
     private struct Round {
         let sprite: SKShapeNode
@@ -517,6 +520,8 @@ private final class AirBattleScene: SKScene {
         let velocity: CGVector
         var lifetime: CGFloat
         let hostile: Bool
+        var altitude: CGFloat = 7600
+        var diveAttack: Bool = false
     }
     private let fighter: Fighter
     private let playMode: AcesPlayMode
@@ -552,6 +557,12 @@ private final class AirBattleScene: SKScene {
     private var lastFormation: CGFloat = -8
     private var heading: CGFloat = .pi / 2
     private var airspeed: CGFloat = 210
+    private var flightEnergy: CGFloat = 68  // 0-100; altitude and airspeed affect available maneuvering energy.
+    private var cloudCover = false
+    private var lastTerrainAlert: CGFloat = -100
+    private let tacticalCue = SKLabelNode(fontNamed:"Menlo-Bold")
+    private let leadCue = SKNode()
+    private var cloudAltitudes: [CGFloat] = []
     private var health: Int
     private var score = 0
     private var kills = 0
@@ -623,6 +634,12 @@ private final class AirBattleScene: SKScene {
         threat.horizontalAlignmentMode = .right
         threat.zPosition = 101
         addChild(threat)
+        tacticalCue.fontSize = 11
+        tacticalCue.fontColor = .yellow
+        tacticalCue.horizontalAlignmentMode = .left
+        tacticalCue.zPosition = 103
+        addChild(tacticalCue)
+        configureLeadCue()
         installTelemetry()
         if playMode == .interception {
             configureAirfield()
@@ -647,6 +664,7 @@ private final class AirBattleScene: SKScene {
         threat.position = CGPoint(x: size.width - 24, y: size.height - 233)
         layoutTelemetry()
         layoutMissionOverlay()
+        tacticalCue.position = CGPoint(x: 23, y: size.height - 65)
         if player.position == .zero { player.position = CGPoint(x: size.width / 2, y: size.height / 2) }
     }
     override func keyDown(with event: NSEvent) {
@@ -824,6 +842,7 @@ private final class AirBattleScene: SKScene {
                 cloud.zPosition = 37
                 environment.addChild(cloud)
                 cloudClusters.append(cloud)
+                cloudAltitudes.append(CGFloat([6200, 7600, 9400, 10800][bank]))
 
                 let shadow = SKSpriteNode(texture: shapes[(bank + cluster) % shapes.count])
                 shadow.color = SKColor.black
@@ -1093,19 +1112,40 @@ private final class AirBattleScene: SKScene {
         let right = keys.contains(124) || keys.contains(2)
         let thrust = keys.contains(126) || keys.contains(13)
         let brake = keys.contains(125) || keys.contains(1)
-        let turnRate: CGFloat = fighter == .thunderbolt ? 2.25 : 2.8
+        // High energy makes maneuvering responsive; slow aircraft have a
+        // softer turn rate rather than an instant or punishing stall.
+        let turnBase: CGFloat = fighter == .thunderbolt ? 2.25 : 2.8
+        let energyTurn = 0.70 + 0.30 * flightEnergy / 100
+        let turnRate = turnBase * energyTurn
         if left { heading += turnRate * dt }
         if right { heading -= turnRate * dt }
         let bankTarget: CGFloat = left ? -0.65 : right ? 0.65 : 0
         bankAngle += (bankTarget - bankAngle) * min(1, dt * 3.6)
-        if keys.contains(12) { climbRate = min(650, climbRate + 950 * dt) }
-        else if keys.contains(14) { climbRate = max(-900, climbRate - 1050 * dt) }
-        else { climbRate += (0 - climbRate) * min(1, dt * 3) }
-        altitude = max(300, min(30000, altitude + climbRate * dt))
-        if thrust { airspeed += 205 * dt }
-        if brake { airspeed -= 235 * dt }
-        airspeed += (-climbRate * 0.012) * dt
-        airspeed = max(105, min(fighter.speed + 95, airspeed))
+        // Q/E remain the only vertical controls. Arcade rates (ft/sec) and
+        // energy tradeoffs: sustained climb costs speed, dives restore it.
+        let verticalTarget: CGFloat = keys.contains(12) ? 58 : keys.contains(14) ? -82 : 0
+        climbRate += (verticalTarget - climbRate) * min(1, dt * 2.2)
+        altitude = max(0, min(26000, altitude + climbRate * dt))
+        if thrust { airspeed += 160 * dt }
+        if brake { airspeed -= 190 * dt }
+        if climbRate > 5 { airspeed -= climbRate * 0.56 * dt }
+        if climbRate < -5 { airspeed += abs(climbRate) * 0.75 * dt }
+        if left || right { airspeed -= 15 * dt }
+        airspeed += (fighter.speed * 0.70 - airspeed) * dt * 0.18
+        airspeed = max(105, min(fighter.speed + 135, airspeed))
+        let speedReserve = max(0, min(100, (airspeed - 105) / max(1, fighter.speed + 135 - 105) * 100))
+        let altitudeReserve = max(0, min(100, (altitude - 300) / 15000 * 100))
+        let targetEnergy = 0.78 * speedReserve + 0.22 * altitudeReserve
+        flightEnergy += (targetEnergy - flightEnergy) * min(1, dt * 1.1)
+        if altitude <= 165 && climbRate < -8 {
+            health = 0
+            beginPlayerCrash()
+            return
+        }
+        if altitude < 670 && gameTime - lastTerrainAlert > 8 {
+            flash("PULL UP  /  TERRAIN AHEAD")
+            lastTerrainAlert = gameTime
+        }
         sounds.engineVolume = (prefs.object(forKey:"aces.soundEnabled") as? Bool ?? true)
             ? Float(effectsVolume * (0.08 + Double(airspeed) / 1900)) : 0
         player.zRotation = heading - .pi / 2
@@ -1144,6 +1184,8 @@ private final class AirBattleScene: SKScene {
                 if node.position.y > size.height + 330 { node.position.y -= size.height + 640 }
             }
         }
+        cloudCover = coveredByCloud(player.position, altitude: altitude)
+        updateLeadCue()
         if keys.contains(49) && gameTime - lastFire > 0.115 {
             firePlayerWeapons()
             lastFire = gameTime
@@ -1311,6 +1353,8 @@ private final class AirBattleScene: SKScene {
             bomber.role = .bomber
             bomber.flightID = flightID
             bomber.wingIndex = i
+            bomber.altitude = 7450 - CGFloat(launchIndex) * 310
+            bomber.sizeAtSpawn = sprite.xScale
             bandits.append(bomber)
             bomberLaunched += 1
         }
@@ -1337,6 +1381,8 @@ private final class AirBattleScene: SKScene {
             escort.role = .escort
             escort.flightID = flightID
             escort.wingIndex = i
+            escort.altitude = 7600 - CGFloat(launchIndex) * 220
+            escort.sizeAtSpawn = sprite.xScale
             bandits.append(escort)
         }
         flash("MISSION ALERT  //  INBOUND STUKAS  \(bomberLaunched)/6")
@@ -1363,8 +1409,11 @@ private final class AirBattleScene: SKScene {
         b.heading += max(-0.48*dt,min(0.48*dt,difference))
         b.position.x += cos(b.heading)*b.speed*dt + scrolling.dx
         b.position.y += sin(b.heading)*b.speed*dt + scrolling.dy
+        b.altitude = max(1250, b.altitude - 47 * dt)
         b.sprite.position = b.position
         b.sprite.zRotation = b.heading - .pi/2
+        let visual = 1 + max(-0.12,min(0.10,(b.altitude-altitude)/6000))
+        b.sprite.setScale(b.sizeAtSpawn * visual)
     }
 
     private func evaluateMission() {
@@ -1455,6 +1504,8 @@ private final class AirBattleScene: SKScene {
             pilot.role = kind == 2 ? .bomber : (kind == 1 ? .interceptor : .hunter)
             pilot.flightID = flightID
             pilot.wingIndex = i
+            pilot.altitude = max(1400, altitude + CGFloat.random(in:-1100...950))
+            pilot.sizeAtSpawn = sprite.xScale
             bandits.append(pilot)
         }
         flash("INCOMING FORMATION — \(count) HOSTILES")
@@ -1595,16 +1646,28 @@ private final class AirBattleScene: SKScene {
             case .flank, .intercept: speedGoal = b.kind == 0 ? 275 : 250
             case .regroup: speedGoal = 225
             }
-            b.speed += max(-115*dt,min(115*dt,speedGoal-b.speed))
+            // Pursue a favorable altitude rather than tracking only in 2D.
+            let verticalDifference = altitude - b.altitude
+            let verticalRate: CGFloat = b.kind == 1 ? 68 : b.kind == 0 ? 56 : 34
+            let altitudeStep = max(-verticalRate*dt,min(verticalRate*dt,verticalDifference))
+            b.climbVelocity = altitudeStep / max(dt,0.001)
+            b.altitude += altitudeStep
+            let diveBoost = b.climbVelocity < -6 ? min(36,abs(b.climbVelocity)*0.35) : 0
+            b.speed += max(-115*dt,min(115*dt,speedGoal + diveBoost-b.speed))
             b.position.x += cos(b.heading)*b.speed*dt + scrolling.dx
             b.position.y += sin(b.heading)*b.speed*dt + scrolling.dy
             b.sprite.position = b.position
             b.sprite.zRotation = b.heading - .pi/2
+            let visual = 1 + max(-0.12,min(0.10,(b.altitude-altitude)/6000))
+            b.sprite.setScale(b.sizeAtSpawn * visual)
 
             let aim = abs(atan2(sin(bearing-b.heading),cos(bearing-b.heading)))
             let aimTolerance: CGFloat = difficulty == 0 ? 0.11 : difficulty == 1 ? 0.16 : 0.20
             let shotRange: CGFloat = difficulty == 0 ? 340 : difficulty == 1 ? 395 : 435
-            if b.tactic == .attack && b.fireCooldown <= 0 &&
+            let altitudeAligned = abs(b.altitude - altitude) < 900
+            let obscured = (cloudCover || coveredByCloud(b.position, altitude:b.altitude))
+            if b.tactic == .attack && b.fireCooldown <= 0 && altitudeAligned &&
+               (!obscured || distance < 150) &&
                distance < shotRange && aim < aimTolerance {
                 fire(from:b.position,angle:b.heading,hostile:true)
                 sounds.play(.gun,volume:effectsVolume*0.075)
@@ -1635,7 +1698,8 @@ private final class AirBattleScene: SKScene {
                b.position.y < -1100 || b.position.y > size.height+1100 {
                 b.sprite.removeFromParent()
                 bandits.remove(at:i)
-            } else if hypot(b.position.x-player.position.x,
+            } else if abs(b.altitude-altitude) < 350 &&
+                      hypot(b.position.x-player.position.x,
                             b.position.y-player.position.y) < 31 &&
                       gameTime > invulnerableUntil {
                 takeDamage()
@@ -1696,9 +1760,14 @@ private final class AirBattleScene: SKScene {
         round.zPosition = 22
         addChild(round)
         let speed: CGFloat = hostile ? 420 : 790
-        rounds.append(Round(sprite: round, position: round.position,
-                            velocity: CGVector(dx: cos(angle) * speed, dy: sin(angle) * speed),
-                            lifetime: hostile ? 1.8 : 1.3, hostile: hostile))
+        rounds.append(Round(sprite:round, position:round.position,
+                            velocity:CGVector(dx:cos(angle)*speed,dy:sin(angle)*speed),
+                            lifetime:hostile ? 1.8 : 1.3, hostile:hostile,
+                            altitude:hostile ? (bandits.min(by:{
+                                hypot($0.position.x-origin.x,$0.position.y-origin.y) <
+                                hypot($1.position.x-origin.x,$1.position.y-origin.y)
+                            })?.altitude ?? altitude) : altitude,
+                            diveAttack:!hostile && climbRate < -32 && flightEnergy > 48))
     }
     private func updateRounds(dt: CGFloat, scrolling: CGVector) {
         for i in rounds.indices.reversed() {
@@ -1709,13 +1778,16 @@ private final class AirBattleScene: SKScene {
             bullet.sprite.position = bullet.position
             var consumed = false
             if bullet.hostile {
-                if gameTime > invulnerableUntil && hypot(bullet.position.x - player.position.x, bullet.position.y - player.position.y) < 25 {
+                if gameTime > invulnerableUntil && abs(bullet.altitude-altitude) < 760 &&
+                   hypot(bullet.position.x - player.position.x, bullet.position.y - player.position.y) < 25 {
                     takeDamage()
                     consumed = true
                 }
             } else {
                 for j in bandits.indices.reversed() {
-                    if hypot(bullet.position.x - bandits[j].position.x, bullet.position.y - bandits[j].position.y) < 35 {
+                    if abs(bullet.altitude-bandits[j].altitude) < 760 &&
+                       hypot(bullet.position.x - bandits[j].position.x,
+                             bullet.position.y - bandits[j].position.y) < 35 {
                         bandits[j].health -= 1
                         // Direct hits provoke a defensive break rather than a
                         // pilot blindly continuing a straight firing run.
@@ -1740,9 +1812,12 @@ private final class AirBattleScene: SKScene {
                             kills += 1
                             if gameTime < comboDeadline { hitCombo += 1 } else { hitCombo = 1 }
                             comboDeadline = gameTime + 3.6
-                            let award = 100 * wave * min(hitCombo, 4)
+                            let diveBonus = bullet.diveAttack ? 75 * wave : 0
+                            let award = 100 * wave * min(hitCombo,4) + diveBonus
                             score += award
-                            if hitCombo > 1 { flash("COMBO ×\(hitCombo)   +\(award)") } else { flash("SPLASH ONE   +\(award)") }
+                            if bullet.diveAttack { flash("BOOM & ZOOM  /  +\(award)") }
+                            else if hitCombo > 1 { flash("COMBO ×\(hitCombo)   +\(award)") }
+                            else { flash("SPLASH ONE   +\(award)") }
                         }
                         break
                     }
