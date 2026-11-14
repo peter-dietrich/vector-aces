@@ -1040,6 +1040,74 @@ private final class AirBattleScene: SKScene {
         return node
     }
 
+    private func drawAlliedB17() -> SKNode {
+        // Original four-engine bomber silhouette for the escort scenario.
+        // Intentionally distinct from the German single-engine Stuka shape.
+        let node = SKNode()
+        let fuselage = SKShapeNode(path: {
+            let p = CGMutablePath()
+            p.move(to:CGPoint(x:0,y:72))
+            p.addLine(to:CGPoint(x:-9,y:48))
+            p.addLine(to:CGPoint(x:-9,y:-61))
+            p.addLine(to:CGPoint(x:-5,y:-76))
+            p.addLine(to:CGPoint(x:5,y:-76))
+            p.addLine(to:CGPoint(x:9,y:-61))
+            p.addLine(to:CGPoint(x:9,y:48))
+            p.closeSubpath()
+            return p
+        }())
+        fuselage.fillColor = SKColor(red:0.60,green:0.68,blue:0.74,alpha:1)
+        fuselage.strokeColor = .white.withAlphaComponent(0.65)
+        fuselage.lineWidth = 1.4
+        node.addChild(fuselage)
+        let wing = SKShapeNode(path:{
+            let p=CGMutablePath()
+            p.move(to:CGPoint(x:-10,y:15))
+            p.addLine(to:CGPoint(x:-100,y:-8))
+            p.addLine(to:CGPoint(x:-100,y:-21))
+            p.addLine(to:CGPoint(x:100,y:-21))
+            p.addLine(to:CGPoint(x:100,y:-8))
+            p.addLine(to:CGPoint(x:10,y:15))
+            p.closeSubpath()
+            return p
+        }())
+        wing.fillColor = SKColor(red:0.53,green:0.63,blue:0.70,alpha:1)
+        wing.strokeColor = .white.withAlphaComponent(0.67)
+        wing.lineWidth = 1.1
+        node.addChild(wing)
+        for x in [-68,-33,33,68] {
+            let engine = SKShapeNode(ellipseOf:CGSize(width:15,height:27))
+            engine.position = CGPoint(x:x,y:-8)
+            engine.fillColor = SKColor(red:0.36,green:0.43,blue:0.47,alpha:1)
+            engine.strokeColor = .black.withAlphaComponent(0.6)
+            node.addChild(engine)
+            let propeller=SKShapeNode(rectOf:CGSize(width:20,height:2))
+            propeller.position = CGPoint(x:x,y:5)
+            propeller.fillColor = .white.withAlphaComponent(0.65)
+            propeller.strokeColor = .clear
+            node.addChild(propeller)
+        }
+        let tail = SKShapeNode(rectOf:CGSize(width:80,height:12))
+        tail.position = CGPoint(x:0,y:-59)
+        tail.fillColor = SKColor(red:0.50,green:0.58,blue:0.64,alpha:1)
+        tail.strokeColor = .white.withAlphaComponent(0.55)
+        node.addChild(tail)
+        for x in [-33,33] {
+            let stabilizer=SKShapeNode(rectOf:CGSize(width:7,height:21))
+            stabilizer.position = CGPoint(x:x,y:-63)
+            stabilizer.fillColor = .white.withAlphaComponent(0.7)
+            stabilizer.strokeColor = .clear
+            node.addChild(stabilizer)
+        }
+        let roundel = SKShapeNode(circleOfRadius:9)
+        roundel.fillColor = .white
+        roundel.strokeColor = .blue
+        roundel.lineWidth = 2
+        roundel.position = CGPoint(x:-76,y:-12)
+        node.addChild(roundel)
+        return node
+    }
+
     private func buildGround() {
         // Satellite-style terrain is rendered locally and needs no network connection.
         // A real geo-referenced texture can later replace this tile source with
@@ -1734,9 +1802,9 @@ private final class AirBattleScene: SKScene {
             node.position = CGPoint(x:size.width*0.34 + CGFloat(i)*64,
                                     y:size.height*0.35 + CGFloat(i)*100)
             node.zPosition = 16
-            let aircraft = drawAircraft(kind:2,color:SKColor(red:0.66,green:0.72,blue:0.77,alpha:1))
+            let aircraft = drawAlliedB17()
             node.addChild(aircraft)
-            node.setScale(1.12)
+            node.setScale(0.64)
             node.zRotation = -.pi/2
             addChild(node)
             allies.append(node)
