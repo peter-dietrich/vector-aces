@@ -487,7 +487,8 @@ private struct GameSurface: NSViewRepresentable {
 }
 
 private final class AirBattleScene: SKScene {
-    private enum Tactic { case formation, intercept, attack, breakAway, regroup }
+    private enum Tactic { case formation, intercept, flank, attack, evade, breakAway, regroup }
+    private enum CombatRole { case interceptor, hunter, escort, bomber }
     private struct Bandit {
         let sprite: SKNode
         var position: CGPoint
@@ -504,6 +505,11 @@ private final class AirBattleScene: SKScene {
         var entryHeading: CGFloat
         var previousDistance: CGFloat
         var missionBomber: Bool = false
+        var role: CombatRole = .hunter
+        var flightID: Int = 0
+        var wingIndex: Int = 0
+        var evadeCooldown: CGFloat = 0
+        var attackPasses: Int = 0
     }
     private struct Round {
         let sprite: SKShapeNode
@@ -532,6 +538,7 @@ private final class AirBattleScene: SKScene {
     private let playerArtwork = SKNode()
     private var keys = Set<UInt16>()
     private var bandits: [Bandit] = []
+    private var nextFlightID = 1
     private var rounds: [Round] = []
     private var effects: [SKNode] = []
     private var environment = SKNode()
@@ -1280,6 +1287,8 @@ private final class AirBattleScene: SKScene {
 
     private func spawnMissionBomberPair() {
         let launchIndex = bomberLaunched / 2
+        let flightID = nextFlightID
+        nextFlightID += 1
         let base = CGPoint(x:airfield.position.x + 1650,
                            y:airfield.position.y + CGFloat(launchIndex-1)*140)
         for i in 0..<2 {
@@ -1293,12 +1302,16 @@ private final class AirBattleScene: SKScene {
             addChild(sprite)
             let toward = atan2(airfield.position.y-point.y,airfield.position.x-point.x)
             sprite.zRotation = toward - .pi/2
-            bandits.append(Bandit(sprite:sprite,position:point,heading:toward,
-                                  speed:118,health:3,kind:2,
-                                  formationTime:0,fireCooldown:100,
-                                  targetOffset:0,tactic:.formation,tacticTime:0,
-                                  maneuverSign:1,entryHeading:toward,
-                                  previousDistance:0,missionBomber:true))
+            var bomber = Bandit(sprite:sprite,position:point,heading:toward,
+                                speed:118,health:3,kind:2,
+                                formationTime:0,fireCooldown:100,
+                                targetOffset:0,tactic:.formation,tacticTime:0,
+                                maneuverSign:1,entryHeading:toward,
+                                previousDistance:0,missionBomber:true)
+            bomber.role = .bomber
+            bomber.flightID = flightID
+            bomber.wingIndex = i
+            bandits.append(bomber)
             bomberLaunched += 1
         }
         // Escorts enter close to the inbound bombers but maneuver
@@ -1314,13 +1327,17 @@ private final class AirBattleScene: SKScene {
             addChild(sprite)
             let toward = atan2(player.position.y-point.y,player.position.x-point.x)
             sprite.zRotation = toward - .pi/2
-            bandits.append(Bandit(sprite:sprite,position:point,heading:toward,
-                                  speed:240,health:2,kind:0,
-                                  formationTime:2,fireCooldown:2.2,
-                                  targetOffset:CGFloat.random(in:-0.65...0.65),
-                                  tactic:.formation,tacticTime:0,
-                                  maneuverSign:i == 0 ? -1 : 1,
-                                  entryHeading:toward,previousDistance:800))
+            var escort = Bandit(sprite:sprite,position:point,heading:toward,
+                                speed:240,health:2,kind:0,
+                                formationTime:2,fireCooldown:2.2,
+                                targetOffset:CGFloat.random(in:-0.65...0.65),
+                                tactic:.formation,tacticTime:0,
+                                maneuverSign:i == 0 ? -1 : 1,
+                                entryHeading:toward,previousDistance:800)
+            escort.role = .escort
+            escort.flightID = flightID
+            escort.wingIndex = i
+            bandits.append(escort)
         }
         flash("MISSION ALERT  //  INBOUND STUKAS  \(bomberLaunched)/6")
     }
@@ -1406,6 +1423,8 @@ private final class AirBattleScene: SKScene {
         }
         let toward = atan2(player.position.y - center.y, player.position.x - center.x)
         let kind = Int.random(in: 0...(wave >= 3 ? 2 : 1))
+        let flightID = nextFlightID
+        nextFlightID += 1
         let style = Int.random(in: 0...2) // V, echelon, or paired flights
         for i in 0..<count {
             let index = CGFloat(i)
@@ -1425,11 +1444,18 @@ private final class AirBattleScene: SKScene {
             sprite.addChild(drawAircraft(kind: kind, color: color))
             sprite.setScale((kind == 2 ? 1.17 : kind == 1 ? 0.87 : 0.96) * 0.9)
             addChild(sprite)
-            bandits.append(Bandit(sprite: sprite, position: location, heading: toward, speed: kind == 2 ? 150 : CGFloat.random(in: 180...240),
-                                  health: kind == 2 ? 5 : (wave >= 3 ? 3 : 2), kind: kind, formationTime: CGFloat.random(in: 1.7...3.7) + row * 0.25,
-                                  fireCooldown: index * 0.18 + 1.3, targetOffset: CGFloat.random(in: -1.15...1.15),
-                                  tactic: .formation, tacticTime: 0, maneuverSign: sign,
-                                  entryHeading: toward, previousDistance: 1000))
+            var pilot = Bandit(sprite: sprite, position: location, heading: toward,
+                               speed: kind == 2 ? 150 : CGFloat.random(in: 180...240),
+                               health: kind == 2 ? 5 : (wave >= 3 ? 3 : 2), kind: kind,
+                               formationTime: CGFloat.random(in: 1.7...3.7) + row * 0.25,
+                               fireCooldown: index * 0.18 + 1.3,
+                               targetOffset: CGFloat.random(in: -1.15...1.15),
+                               tactic: .formation, tacticTime: 0, maneuverSign: sign,
+                               entryHeading: toward, previousDistance: 1000)
+            pilot.role = kind == 2 ? .bomber : (kind == 1 ? .interceptor : .hunter)
+            pilot.flightID = flightID
+            pilot.wingIndex = i
+            bandits.append(pilot)
         }
         flash("INCOMING FORMATION — \(count) HOSTILES")
     }
@@ -2121,6 +2147,7 @@ private final class AirBattleScene: SKScene {
         rounds.removeAll()
         gameTime = 0
         lastFormation = -8
+        nextFlightID = 1
         lastWarning = -10
         hitCombo = 0
         comboDeadline = 0
