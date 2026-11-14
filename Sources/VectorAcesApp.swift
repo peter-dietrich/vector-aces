@@ -2757,7 +2757,7 @@ private final class AirBattleScene: SKScene {
                 total=1;done=eliteDown ? 1 : 0
                 objectiveMax=3;objectiveHealth=min(3,max(0,health))
             }
-            missionTitle="M\(campaignMission.rawValue) / \(campaignMission.title)"
+            missionTitle="M\(campaignMission.rawValue) / \(campaignMission == .stukas ? "STUKAS" : campaignMission == .escort ? "ESCORT" : campaignMission == .ace ? "ENEMY ACE" : "BRIDGE")"
             secondsRemaining=max(0,campaignMission.duration-missionTime)
             fraction=max(0,1-missionTime/max(1,campaignMission.duration))
         }
@@ -3041,7 +3041,7 @@ private final class LeftFlightHUDNode: SKNode {
         tape.fillColor=SKColor.black.withAlphaComponent(0.30)
         tape.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.23)
         addChild(tape)
-        AcesHUDVisual.text("ALT",at:CGPoint(x:138,y:-270),size:9,
+        AcesHUDVisual.text("ALT",at:CGPoint(x:143,y:-269),size:9,
                            color:AcesHUDVisual.muted,parent:self)
         for offset in [-42,42] {
             addChild(AcesHUDVisual.line(CGPoint(x:145,y:-345+CGFloat(offset)),
@@ -3057,7 +3057,7 @@ private final class LeftFlightHUDNode: SKNode {
         topTick.position=CGPoint(x:164,y:-303)
         bottomTick.position=CGPoint(x:164,y:-390)
         altitudeLabel.position=CGPoint(x:164,y:-345)
-        altitudeLabel.fontSize=15
+        altitudeLabel.fontSize=14
         altitudeLabel.fontColor=AcesHUDVisual.ice
         altitudeLabel.horizontalAlignmentMode = .center
         addChild(altitudeLabel)
@@ -3075,9 +3075,9 @@ private final class LeftFlightHUDNode: SKNode {
         vsPointer.fillColor=AcesHUDVisual.amber
         vsPointer.strokeColor = .clear
         addChild(vsPointer)
-        vsLabel.position=CGPoint(x:170,y:-439)
+        vsLabel.position=CGPoint(x:169,y:-433)
         vsLabel.fontColor=AcesHUDVisual.ice
-        vsLabel.fontSize=10
+        vsLabel.fontSize=9
         vsLabel.horizontalAlignmentMode = .center
         addChild(vsLabel)
 
@@ -3117,7 +3117,7 @@ private final class LeftFlightHUDNode: SKNode {
             pip.strokeColor = .clear
             addChild(pip)
         }
-        coverLabel.position=CGPoint(x:12,y:-447)
+        coverLabel.position=CGPoint(x:12,y:-427)
         coverLabel.fontColor=AcesHUDVisual.amber
         coverLabel.fontSize=9
         addChild(coverLabel)
@@ -3350,32 +3350,32 @@ private final class RightCombatHUDNode: SKNode {
             addChild(light)
         }
 
-        missionTitleText.position=CGPoint(x:14,y:-364)
-        missionTitleText.fontSize=11
+        missionTitleText.position=CGPoint(x:14,y:-363)
+        missionTitleText.fontSize=10
         missionTitleText.fontColor=AcesHUDVisual.ice
         addChild(missionTitleText)
-        objectiveCounter.position=CGPoint(x:235,y:-364)
+        objectiveCounter.position=CGPoint(x:234,y:-363)
         objectiveCounter.fontSize=13
         objectiveCounter.fontColor = .white
         objectiveCounter.horizontalAlignmentMode = .right
         addChild(objectiveCounter)
         for (i,pip) in missionPips.enumerated() {
-            pip.position=CGPoint(x:21+CGFloat(i)*28,y:-388)
+            pip.position=CGPoint(x:21+CGFloat(i)*28,y:-393)
             pip.strokeColor = .clear
             addChild(pip)
         }
-        AcesHUDVisual.text("OBJECTIVE",at:CGPoint(x:15,y:-416),size:9,
+        AcesHUDVisual.text("OBJ",at:CGPoint(x:15,y:-414),size:9,
                            color:AcesHUDVisual.muted,parent:self)
         for (i,pip) in shieldPips.enumerated() {
-            pip.position=CGPoint(x:106+CGFloat(i)*38,y:-417)
+            pip.position=CGPoint(x:114+CGFloat(i)*38,y:-414)
             pip.strokeColor = .clear
             addChild(pip)
         }
-        clockArc.position=CGPoint(x:22,y:-431)
+        clockArc.position=CGPoint(x:24,y:-433)
         clockArc.strokeColor=AcesHUDVisual.amber
         clockArc.lineWidth=4
         addChild(clockArc)
-        clockText.position=CGPoint(x:49,y:-431)
+        clockText.position=CGPoint(x:48,y:-433)
         clockText.fontSize=10
         clockText.fontColor=AcesHUDVisual.amber
         addChild(clockText)
@@ -3466,7 +3466,7 @@ private final class RightCombatHUDNode: SKNode {
                 AcesHUDVisual.red.withAlphaComponent(0.45)
         }
         clockArc.path=AcesHUDVisual.arc(radius:9,fraction:max(0,min(1,v.missionFraction)))
-        clockText.text=v.secondsRemaining.map{"T-\(Int(max(0,$0))) SEC"} ?? "ENDLESS"
+        clockText.text=v.secondsRemaining.map{"T-\(Int(max(0,$0)))s"} ?? "∞ TIME"
         radarLabel.text="RANGE \(Int(v.radarRange))"
         sweep.zRotation = v.radarSweep
         if time-lastRadarUpdate < 0.045 { return }
