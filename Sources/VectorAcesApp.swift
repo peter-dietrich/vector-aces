@@ -62,6 +62,11 @@ extension Fighter {
         }
     }
 }
+private enum AcesPlayMode: String {
+    case interception
+    case endless
+}
+
 private enum AcesStyle {
     static let ice = Color(red: 0.5, green: 0.88, blue: 0.98)
     static let amber = Color(red: 1, green: 0.72, blue: 0.37)
@@ -201,13 +206,15 @@ private struct AcesSettings: View {
     @State private var started = false
     @State private var showingSettings = false
     @AppStorage("aces.hasSave") private var hasSave = false
+    @AppStorage("aces.playMode") private var playMode = AcesPlayMode.interception.rawValue
     private var fighter: Fighter { Fighter(rawValue:selectedFighter) ?? .mustang }
     var body: some Scene {
         WindowGroup("Vector Aces") {
             ZStack {
                 Color(red:0.025,green:0.045,blue:0.077).ignoresSafeArea()
                 if started {
-                    AcesGameWindow(fighter:fighter, onHangar: { started = false })
+                    AcesGameWindow(fighter:fighter, mode:AcesPlayMode(rawValue:playMode) ?? .interception,
+                                   onHangar: { started = false })
                         .id(fighter)
                 } else {
                     ScrollView {
@@ -229,6 +236,20 @@ private struct AcesSettings: View {
                             }
                             HStack(alignment:.top,spacing:18) {
                                 VStack(alignment:.leading,spacing:13) {
+                                    Text("MISSION TYPE")
+                                        .font(.system(size:11,weight:.bold,design:.monospaced))
+                                        .foregroundStyle(AcesStyle.ice)
+                                    Picker("Mission type",selection:$playMode) {
+                                        Text("Stop the Stukas").tag(AcesPlayMode.interception.rawValue)
+                                        Text("Endless Dogfight").tag(AcesPlayMode.endless.rawValue)
+                                    }
+                                    .labelsHidden().pickerStyle(.segmented)
+                                    Text(playMode == AcesPlayMode.interception.rawValue
+                                         ? "MISSION 01 • DEFEND ALLIED AIRFIELD\nINTERCEPT SIX DIVE BOMBERS"
+                                         : "FREE FLIGHT • ENDLESS FORMATIONS")
+                                        .font(.system(size:10,weight:.medium,design:.monospaced))
+                                        .foregroundStyle(AcesStyle.amber)
+                                        .fixedSize(horizontal:false,vertical:true)
                                     Text("SELECT AIRCRAFT").font(.system(size:12,weight:.bold,design:.monospaced))
                                         .tracking(2).foregroundStyle(AcesStyle.ice)
                                     ForEach(Fighter.allCases) { choice in
@@ -254,7 +275,7 @@ private struct AcesSettings: View {
                                         }.buttonStyle(.plain)
                                     }
                                     Spacer(minLength:12)
-                                    if hasSave {
+                                    if hasSave && playMode == AcesPlayMode.endless.rawValue {
                                         Button("RESUME SORTIE") {
                                             UserDefaults.standard.set(true, forKey: "aces.resumeRequested")
                                             started = true
@@ -263,7 +284,7 @@ private struct AcesSettings: View {
                                         .frame(maxWidth:.infinity).padding(12)
                                         .background(AcesStyle.ice.opacity(0.22),in:RoundedRectangle(cornerRadius:8))
                                     }
-                                    Button("START NEW SORTIE") {
+                                    Button(playMode == AcesPlayMode.interception.rawValue ? "MISSION BRIEFING" : "START NEW SORTIE") {
                                         CombatAudio.shared.play(.menu,volume:0.18)
                                         UserDefaults.standard.set(false, forKey: "aces.resumeRequested")
                                         started = true
@@ -283,7 +304,7 @@ private struct AcesSettings: View {
                                 VStack(alignment:.leading,spacing:12) {
                                     HStack {
                                         VStack(alignment:.leading,spacing:4) {
-                                            Text(fighter.rawValue.uppercased())
+                                            Text(mode == .interception ? "MISSION 01  /  STOP THE STUKAS" : fighter.rawValue.uppercased())
                                                 .font(.system(size:24,weight:.black,design:.monospaced))
                                             Text(fighter.role)
                                                 .font(.system(size:11,weight:.semibold,design:.monospaced))
@@ -344,17 +365,19 @@ private struct AcesSettings: View {
 }
 private struct AcesGameWindow: View {
     let fighter: Fighter
+    let mode: AcesPlayMode
     let onHangar: () -> Void
     @AppStorage("aces.difficulty") private var difficulty = 1
     @AppStorage("aces.soundEnabled") private var soundEnabled = true
     @State private var showingCustom = false
     @State private var scene: AirBattleScene
 
-    init(fighter: Fighter, onHangar: @escaping () -> Void) {
+    init(fighter: Fighter, mode: AcesPlayMode, onHangar: @escaping () -> Void) {
         self.fighter = fighter
+        self.mode = mode
         self.onHangar = onHangar
         _scene = State(initialValue: AirBattleScene(
-            size: CGSize(width: 1200, height: 720), fighter: fighter))
+            size: CGSize(width: 1200, height: 720), fighter: fighter, mode: mode))
     }
     var body: some View {
         VStack(spacing:0) {
@@ -376,7 +399,10 @@ private struct AcesGameWindow: View {
                     Spacer(minLength:4)
                     Button("Custom Game") { showingCustom = true }
                     Button("Save Game") { scene.saveNow() }
+                        .disabled(mode == .interception)
+                        .help(mode == .interception ? "Mission runs use a mission debrief; save slots are for Endless Dogfight." : "Save endless sortie")
                     Button("Resume") { scene.resumeSavedSortie() }
+                        .disabled(mode == .interception)
                     Toggle("Sound",isOn:$soundEnabled)
                         .toggleStyle(.checkbox)
                         .onChange(of:soundEnabled) { newValue in
@@ -473,6 +499,7 @@ private final class AirBattleScene: SKScene {
         let hostile: Bool
     }
     private let fighter: Fighter
+    private let playMode: AcesPlayMode
     private var player = SKNode()
     private let playerArtwork = SKNode()
     private var keys = Set<UInt16>()
@@ -526,8 +553,9 @@ private final class AirBattleScene: SKScene {
     private let sounds = CombatAudio.shared
     private let prefs = UserDefaults.standard
 
-    init(size: CGSize, fighter: Fighter) {
+    init(size: CGSize, fighter: Fighter, mode: AcesPlayMode) {
         self.fighter = fighter
+        self.playMode = mode
         self.health = fighter.health
         self.ammo = fighter.ammunition
         super.init(size: size)
