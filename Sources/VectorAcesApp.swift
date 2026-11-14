@@ -420,7 +420,10 @@ private struct AcesGameWindow: View {
                         }
                     Button("Hangar") { onHangar() }
                         .keyboardShortcut(.escape,modifiers:[])
-                    Button("New Game") { scene.restart() }
+                    Button(mode == .interception ? "Launch / Retry" : "New Game") {
+                        if mode == .interception { scene.startOrRetryMission() }
+                        else { scene.restart() }
+                    }
                         .buttonStyle(.borderedProminent)
                         .tint(.cyan)
                 }
@@ -1249,6 +1252,12 @@ private final class AirBattleScene: SKScene {
         }
         missionText.text = ""
         status.text = ""
+    }
+
+    func startOrRetryMission() {
+        guard playMode == .interception else { return }
+        if missionStage != .briefing { restart() }
+        beginMission()
     }
 
     private func beginMission() {
