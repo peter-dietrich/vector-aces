@@ -1114,7 +1114,13 @@ private final class AirBattleScene: SKScene {
         let brake = keys.contains(125) || keys.contains(1)
         // High energy makes maneuvering responsive; slow aircraft have a
         // softer turn rate rather than an instant or punishing stall.
-        let turnBase: CGFloat = fighter == .thunderbolt ? 2.25 : 2.8
+        let turnBase: CGFloat
+        switch fighter {
+        case .mustang: turnBase = 2.75
+        case .thunderbolt: turnBase = 2.23
+        case .lightning: turnBase = 2.58
+        case .warhawk: turnBase = 3.02
+        }
         let energyTurn = 0.70 + 0.30 * flightEnergy / 100
         let turnRate = turnBase * energyTurn
         if left { heading += turnRate * dt }
@@ -1123,7 +1129,16 @@ private final class AirBattleScene: SKScene {
         bankAngle += (bankTarget - bankAngle) * min(1, dt * 3.6)
         // Q/E remain the only vertical controls. Arcade rates (ft/sec) and
         // energy tradeoffs: sustained climb costs speed, dives restore it.
-        let verticalTarget: CGFloat = keys.contains(12) ? 58 : keys.contains(14) ? -82 : 0
+        let climbPerformance: CGFloat
+        let divePerformance: CGFloat
+        switch fighter {
+        case .mustang: (climbPerformance,divePerformance) = (62,86)
+        case .thunderbolt: (climbPerformance,divePerformance) = (47,103)
+        case .lightning: (climbPerformance,divePerformance) = (57,90)
+        case .warhawk: (climbPerformance,divePerformance) = (54,81)
+        }
+        let verticalTarget: CGFloat = keys.contains(12) ? climbPerformance :
+            keys.contains(14) ? -divePerformance : 0
         climbRate += (verticalTarget - climbRate) * min(1, dt * 2.2)
         altitude = max(0, min(26000, altitude + climbRate * dt))
         if thrust { airspeed += 160 * dt }
@@ -1132,8 +1147,10 @@ private final class AirBattleScene: SKScene {
         if climbRate < -5 { airspeed += abs(climbRate) * 0.75 * dt }
         if left || right { airspeed -= 15 * dt }
         airspeed += (fighter.speed * 0.70 - airspeed) * dt * 0.18
-        airspeed = max(105, min(fighter.speed + 135, airspeed))
-        let speedReserve = max(0, min(100, (airspeed - 105) / max(1, fighter.speed + 135 - 105) * 100))
+        let diveSpeedReserve: CGFloat = fighter == .thunderbolt ? 155 : 135
+        airspeed = max(105, min(fighter.speed + diveSpeedReserve, airspeed))
+        let speedReserve = max(0, min(100, (airspeed - 105) /
+            max(1, fighter.speed + diveSpeedReserve - 105) * 100))
         let altitudeReserve = max(0, min(100, (altitude - 300) / 15000 * 100))
         let targetEnergy = 0.78 * speedReserve + 0.22 * altitudeReserve
         flightEnergy += (targetEnergy - flightEnergy) * min(1, dt * 1.1)
