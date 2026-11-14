@@ -616,7 +616,7 @@ private struct AcesGameWindow: View {
                             Text("VECTOR ACES")
                                 .font(.system(size:19,weight:.black,design:.monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.13c")
+                            Text("v2026.11.14a")
                                 .font(.system(size:10,weight:.medium,design:.monospaced))
                                 .foregroundStyle(.gray)
                         }
