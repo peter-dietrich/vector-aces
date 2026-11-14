@@ -3283,6 +3283,333 @@ private final class LeftFlightHUDNode: SKNode {
     }
 }
 
+private struct AcesRadarContact {
+    let lateral:CGFloat
+    let forward:CGFloat
+    let bomber:Bool
+    let ally:Bool
+    let ace:Bool
+    let objective:Bool
+}
+
+private struct AcesCombatHUDValue {
+    let score:Int
+    let wave:Int
+    let kills:Int
+    let ammo:Int
+    let ammoMax:Int
+    let unlimitedAmmo:Bool
+    let recentlyFired:Bool
+    let targetBearing:CGFloat?
+    let targetRange:CGFloat?
+    let targetAltitudeDelta:CGFloat?
+    let targetClosing:Bool
+    let targetIsAce:Bool
+    let contacts:[AcesRadarContact]
+    let radarRange:CGFloat
+    let radarSweep:CGFloat
+    let rearThreat:Bool
+    let missionTitle:String
+    let missionDone:Int
+    let missionTotal:Int
+    let objectiveHealth:Int
+    let objectiveMax:Int
+    let secondsRemaining:CGFloat?
+    let missionFraction:CGFloat
+}
+
+private final class RightCombatHUDNode: SKNode {
+    static let panelWidth:CGFloat=248
+    private let scoreText=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let waveText=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let killsText=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let targetInfo=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let targetDelta=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let targetArrow=SKNode()
+    private let threatRing=SKShapeNode(circleOfRadius:50)
+    private let ammoText=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let fireFlash=[SKShapeNode(circleOfRadius:5),SKShapeNode(circleOfRadius:5)]
+    private let weaponPips:(SKShapeNode,SKShapeNode,SKShapeNode,SKShapeNode,SKShapeNode,
+                             SKShapeNode,SKShapeNode,SKShapeNode,SKShapeNode,SKShapeNode)
+    private let missionTitleText=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let objectiveCounter=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let clockText=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let missionPips:[SKShapeNode]
+    private let shieldPips:[SKShapeNode]
+    private let clockArc=SKShapeNode()
+    private let sweep=SKNode()
+    private let radarContacts=SKNode()
+    private let radarLabel=SKLabelNode(fontNamed:"Menlo-Bold")
+    private var lastRadarUpdate:CGFloat = -100
+
+    override init() {
+        let pips=(0..<10).map { _ in
+            SKShapeNode(rectOf:CGSize(width:18,height:7),cornerRadius:2)
+        }
+        weaponPips=(pips[0],pips[1],pips[2],pips[3],pips[4],
+                    pips[5],pips[6],pips[7],pips[8],pips[9])
+        missionPips=(0..<8).map { _ in SKShapeNode(circleOfRadius:5) }
+        shieldPips=(0..<3).map { _ in
+            SKShapeNode(rectOf:CGSize(width:34,height:9),cornerRadius:2)
+        }
+        super.init()
+        setup()
+    }
+    required init?(coder:NSCoder) { fatalError("Not supported") }
+    private var ammoPips:[SKShapeNode] {
+        [weaponPips.0,weaponPips.1,weaponPips.2,weaponPips.3,weaponPips.4,
+         weaponPips.5,weaponPips.6,weaponPips.7,weaponPips.8,weaponPips.9]
+    }
+
+    private func setup() {
+        zPosition=92
+        addChild(AcesHUDVisual.panel(CGRect(x:0,y:-194,width:248,height:194)))
+        addChild(AcesHUDVisual.panel(CGRect(x:0,y:-315,width:248,height:113)))
+        addChild(AcesHUDVisual.panel(CGRect(x:0,y:-446,width:248,height:123)))
+        addChild(AcesHUDVisual.panel(CGRect(x:0,y:-676,width:248,height:222)))
+        AcesHUDVisual.text("COMBAT / TARGET",at:CGPoint(x:14,y:-19),
+                           color:AcesHUDVisual.amber,parent:self)
+        AcesHUDVisual.text("GUNS / AMMUNITION",at:CGPoint(x:14,y:-221),
+                           color:AcesHUDVisual.amber,parent:self)
+        AcesHUDVisual.text("MISSION / OBJECTIVE",at:CGPoint(x:14,y:-340),
+                           color:AcesHUDVisual.amber,parent:self)
+        AcesHUDVisual.text("RADAR / 2400",at:CGPoint(x:14,y:-475),
+                           color:AcesHUDVisual.amber,parent:self)
+        scoreText.position=CGPoint(x:16,y:-61)
+        scoreText.fontSize=27
+        scoreText.fontColor=AcesHUDVisual.ice
+        scoreText.horizontalAlignmentMode = .left
+        addChild(scoreText)
+        waveText.position=CGPoint(x:16,y:-101)
+        waveText.fontColor=.white
+        waveText.fontSize=13
+        addChild(waveText)
+        killsText.position=CGPoint(x:16,y:-125)
+        killsText.fontColor=AcesHUDVisual.muted
+        killsText.fontSize=11
+        addChild(killsText)
+
+        let compass=SKShapeNode(circleOfRadius:46)
+        compass.position=CGPoint(x:191,y:-104)
+        compass.fillColor=SKColor.black.withAlphaComponent(0.34)
+        compass.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.35)
+        compass.lineWidth=1.3
+        addChild(compass)
+        for index in 0..<12 {
+            let angle=CGFloat(index)*.pi/6
+            addChild(AcesHUDVisual.line(
+                CGPoint(x:191+sin(angle)*40,y:-104+cos(angle)*40),
+                CGPoint(x:191+sin(angle)*45,y:-104+cos(angle)*45),
+                color:AcesHUDVisual.muted.withAlphaComponent(0.6)))
+        }
+        let nose=SKShapeNode(path:{
+            let p=CGMutablePath()
+            p.move(to:CGPoint(x:0,y:10))
+            p.addLine(to:CGPoint(x:-6,y:-7))
+            p.addLine(to:CGPoint(x:0,y:-3))
+            p.addLine(to:CGPoint(x:6,y:-7))
+            p.closeSubpath()
+            return p
+        }())
+        nose.fillColor=AcesHUDVisual.ice
+        nose.strokeColor = .clear
+        nose.position=CGPoint(x:191,y:-104)
+        addChild(nose)
+        targetArrow.position=CGPoint(x:191,y:-104)
+        let pointer=SKShapeNode(path:{
+            let p=CGMutablePath()
+            p.move(to:CGPoint(x:0,y:39))
+            p.addLine(to:CGPoint(x:-6,y:26))
+            p.addLine(to:CGPoint(x:6,y:26))
+            p.closeSubpath()
+            return p
+        }())
+        pointer.fillColor=AcesHUDVisual.amber
+        pointer.strokeColor = .clear
+        targetArrow.addChild(pointer)
+        addChild(targetArrow)
+        threatRing.position=CGPoint(x:191,y:-104)
+        threatRing.fillColor = .clear
+        threatRing.strokeColor=AcesHUDVisual.red
+        threatRing.lineWidth=2.5
+        threatRing.isHidden=true
+        addChild(threatRing)
+        targetInfo.position=CGPoint(x:14,y:-165)
+        targetInfo.fontSize=11
+        targetInfo.fontColor=.white
+        addChild(targetInfo)
+        targetDelta.position=CGPoint(x:235,y:-165)
+        targetDelta.horizontalAlignmentMode = .right
+        targetDelta.fontSize=10
+        targetDelta.fontColor=AcesHUDVisual.ice
+        addChild(targetDelta)
+
+        ammoText.position=CGPoint(x:15,y:-263)
+        ammoText.fontSize=27
+        ammoText.fontColor=AcesHUDVisual.ice
+        addChild(ammoText)
+        for (i,pip) in ammoPips.enumerated() {
+            pip.position=CGPoint(x:22+CGFloat(i)*22,y:-298)
+            pip.strokeColor = .clear
+            addChild(pip)
+        }
+        for (i,light) in fireFlash.enumerated() {
+            light.position=CGPoint(x:210+CGFloat(i)*20,y:-259)
+            light.strokeColor = .clear
+            addChild(light)
+        }
+
+        missionTitleText.position=CGPoint(x:14,y:-364)
+        missionTitleText.fontSize=11
+        missionTitleText.fontColor=AcesHUDVisual.ice
+        addChild(missionTitleText)
+        objectiveCounter.position=CGPoint(x:235,y:-364)
+        objectiveCounter.fontSize=13
+        objectiveCounter.fontColor=.white
+        objectiveCounter.horizontalAlignmentMode = .right
+        addChild(objectiveCounter)
+        for (i,pip) in missionPips.enumerated() {
+            pip.position=CGPoint(x:21+CGFloat(i)*28,y:-388)
+            pip.strokeColor = .clear
+            addChild(pip)
+        }
+        AcesHUDVisual.text("OBJECTIVE",at:CGPoint(x:15,y:-416),size:9,
+                           color:AcesHUDVisual.muted,parent:self)
+        for (i,pip) in shieldPips.enumerated() {
+            pip.position=CGPoint(x:106+CGFloat(i)*38,y:-417)
+            pip.strokeColor = .clear
+            addChild(pip)
+        }
+        clockArc.position=CGPoint(x:22,y:-431)
+        clockArc.strokeColor=AcesHUDVisual.amber
+        clockArc.lineWidth=4
+        addChild(clockArc)
+        clockText.position=CGPoint(x:49,y:-431)
+        clockText.fontSize=10
+        clockText.fontColor=AcesHUDVisual.amber
+        addChild(clockText)
+
+        let radarCenter=CGPoint(x:124,y:-568)
+        for fraction in [CGFloat(0.33),0.66,1.0] {
+            let ring=SKShapeNode(circleOfRadius:88*fraction)
+            ring.position=radarCenter
+            ring.fillColor = .clear
+            ring.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.22)
+            ring.lineWidth=1
+            addChild(ring)
+        }
+        addChild(AcesHUDVisual.line(CGPoint(x:36,y:-568),CGPoint(x:212,y:-568),
+                                   color:AcesHUDVisual.ice.withAlphaComponent(0.19)))
+        addChild(AcesHUDVisual.line(CGPoint(x:124,y:-480),CGPoint(x:124,y:-656),
+                                   color:AcesHUDVisual.ice.withAlphaComponent(0.19)))
+        sweep.position=radarCenter
+        for i in 0..<16 {
+            let delta=CGFloat(i)*0.038
+            let ray=AcesHUDVisual.line(.zero,
+                           CGPoint(x:sin(delta)*88,y:cos(delta)*88),
+                           color:AcesHUDVisual.ice.withAlphaComponent(
+                               0.52*CGFloat(16-i)/16),width:i == 0 ? 2 : 0.8)
+            sweep.addChild(ray)
+        }
+        addChild(sweep)
+        radarContacts.position=radarCenter
+        addChild(radarContacts)
+        let center=SKShapeNode(circleOfRadius:4)
+        center.position=radarCenter
+        center.fillColor=AcesHUDVisual.ice
+        center.strokeColor = .clear
+        addChild(center)
+        radarLabel.position=CGPoint(x:235,y:-665)
+        radarLabel.fontSize=10
+        radarLabel.fontColor=AcesHUDVisual.muted
+        radarLabel.horizontalAlignmentMode = .right
+        radarLabel.text="2,400 UNITS"
+        addChild(radarLabel)
+    }
+
+    func layout(in sceneSize:CGSize) {
+        let factor=min(1,max(0.66,(sceneSize.height-22)/694))
+        setScale(factor)
+        position=CGPoint(x:sceneSize.width-14-248*factor,y:sceneSize.height-14)
+    }
+
+    func render(_ v:AcesCombatHUDValue, time:CGFloat) {
+        scoreText.text=String(format:"%06d",v.score)
+        waveText.text=String(format:"WAVE %02d",v.wave)
+        killsText.text=String(format:"%02d KILLS   /   %02d CONTACTS",v.kills,v.contacts.filter{!$0.ally && !$0.objective}.count)
+        targetArrow.isHidden=v.targetBearing == nil
+        if let bearing=v.targetBearing { targetArrow.zRotation=bearing }
+        threatRing.isHidden = !v.rearThreat
+        if v.rearThreat {
+            threatRing.alpha=0.35+0.65*(0.5+0.5*sin(time*9))
+        }
+        targetInfo.text=v.targetRange.map { "TGT \(Int($0))" } ?? "NO CONTACT"
+        if let delta=v.targetAltitudeDelta {
+            let alt=String(format:"%+.0f",delta)
+            targetDelta.text="Δ \(alt) FT"
+        } else { targetDelta.text="—" }
+        targetDelta.fontColor=abs(v.targetAltitudeDelta ?? 0) > 760 ?
+            AcesHUDVisual.amber : AcesHUDVisual.ice
+        ammoText.text=v.unlimitedAmmo ? "∞" : String(v.ammo)
+        let ammoRatio=v.unlimitedAmmo ? CGFloat(1) :
+            CGFloat(max(0,v.ammo))/CGFloat(max(1,v.ammoMax))
+        for (i,pip) in ammoPips.enumerated() {
+            pip.fillColor = CGFloat(i)/10 < ammoRatio ?
+                AcesHUDVisual.ice : AcesHUDVisual.muted.withAlphaComponent(0.14)
+        }
+        for light in fireFlash {
+            light.fillColor=v.recentlyFired ? AcesHUDVisual.amber :
+                AcesHUDVisual.amber.withAlphaComponent(0.12)
+        }
+        missionTitleText.text=v.missionTitle
+        objectiveCounter.text="\(v.missionDone)/\(v.missionTotal)"
+        for (i,pip) in missionPips.enumerated() {
+            pip.isHidden=i>=v.missionTotal
+            pip.fillColor=i < v.missionDone ? AcesHUDVisual.ice :
+                AcesHUDVisual.muted.withAlphaComponent(0.22)
+        }
+        for (i,pip) in shieldPips.enumerated() {
+            pip.isHidden=i>=v.objectiveMax
+            pip.fillColor=i < v.objectiveHealth ? AcesHUDVisual.ice :
+                AcesHUDVisual.red.withAlphaComponent(0.45)
+        }
+        clockArc.path=AcesHUDVisual.arc(radius:9,fraction:max(0,min(1,v.missionFraction)))
+        clockText.text=v.secondsRemaining.map{"T-\(Int(max(0,$0))) SEC"} ?? "ENDLESS"
+        radarLabel.text="RANGE \(Int(v.radarRange))"
+        sweep.zRotation = v.radarSweep
+        if time-lastRadarUpdate < 0.045 { return }
+        lastRadarUpdate=time
+        radarContacts.removeAllChildren()
+        for contact in v.contacts.prefix(65) {
+            let range=hypot(contact.lateral,contact.forward)
+            guard range <= v.radarRange else { continue }
+            let normalized=range / v.radarRange
+            let radial=88 * pow(normalized,0.77)
+            let x=range>0 ? contact.lateral/range*radial : 0
+            let y=range>0 ? contact.forward/range*radial : 0
+            let color:SKColor = contact.objective ? .green :
+                contact.ally ? AcesHUDVisual.ice :
+                contact.ace ? .magenta :
+                contact.bomber ? AcesHUDVisual.amber : AcesHUDVisual.red
+            let blip:SKShapeNode
+            if contact.objective {
+                blip=SKShapeNode(rectOf:CGSize(width:7,height:7))
+            } else {
+                blip=SKShapeNode(circleOfRadius:(contact.bomber || contact.ally ? 3.9 : 3.0)*(1-0.3*normalized))
+            }
+            blip.position=CGPoint(x:x,y:y)
+            blip.fillColor=color
+            blip.strokeColor = .clear
+            blip.glowWidth=contact.ace ? 3.5 : 1.5
+            let angle=atan2(x,y)
+            let diff=(v.radarSweep-angle).truncatingRemainder(dividingBy:2 * .pi)
+            let lag=diff<0 ? diff+2 * .pi : diff
+            blip.alpha=(0.25+0.75*exp(-lag*0.45))*(1-0.35*normalized)
+            radarContacts.addChild(blip)
+        }
+    }
+}
+
 private final class CombatAudio {
     enum Effect: CaseIterable, Hashable { case gun, hit, explosion, warning, menu }
     static let shared = CombatAudio()
