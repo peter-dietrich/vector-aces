@@ -2640,275 +2640,144 @@ private final class AirBattleScene: SKScene {
             coveredByCloud(target.position,altitude:target.altitude)
     }
 
-    private func installTelemetry() {
-        hud.isHidden = true // SwiftUI header and footer own their navigation text.
-        let ice = SKColor(calibratedRed: 0.12, green: 0.91, blue: 0.99, alpha: 1)
-        let amber = SKColor(calibratedRed: 1, green: 0.72, blue: 0.40, alpha: 0.94)
-        let muted = SKColor(calibratedWhite: 0.82, alpha: 0.9)
-        telemetryPanel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13,
-            alpha: CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.23))
-        telemetryPanel.strokeColor = SKColor(calibratedWhite: 0.81, alpha: 0.17)
-        telemetryPanel.lineWidth = 0.55
-        telemetryPanel.zPosition = 90
-        addChild(telemetryPanel)
-
-        telemetryAccent.fillColor = amber.withAlphaComponent(0.72)
-        telemetryAccent.strokeColor = .clear
-        telemetryAccent.zPosition = 91
-        addChild(telemetryAccent)
-        for rule in telemetryRules {
-            rule.fillColor = SKColor(calibratedWhite: 0.81, alpha: 0.20)
-            rule.strokeColor = .clear
-            rule.zPosition = 91
-            addChild(rule)
-        }
-        for (i, label) in telemetryLines.enumerated() {
-            label.fontSize = i == 2 ? 30 : i == 5 ? 25 :
-                (i == 8 || i == 9 || i == 12 ? 13 : 10)
-            if [0, 7, 11, 15].contains(i) {
-                label.fontSize = 9
-                label.fontColor = amber
-            } else if [2, 5, 8, 9].contains(i) {
-                label.fontColor = ice
-            } else {
-                label.fontColor = muted
-            }
-            label.horizontalAlignmentMode = .right
-            label.verticalAlignmentMode = .center
-            label.zPosition = 93
-            addChild(label)
-        }
-        radarPanel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13,
-            alpha: CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.23))
-        radarPanel.strokeColor = .cyan.withAlphaComponent(0.3)
-        radarPanel.lineWidth = 0.7
-        radarPanel.zPosition = 91
-        addChild(radarPanel)
-        radarContacts.zPosition = 93
-        addChild(radarContacts)
-        radarLegend.fontSize = 9
-        radarLegend.fontColor = SKColor(calibratedWhite:0.86,alpha:0.89)
-        radarLegend.horizontalAlignmentMode = .right
-        radarLegend.zPosition = 95
-        radarLegend.text = "LONG RANGE  /  2400 UNITS"
-        addChild(radarLegend)
-
-        attitudePanel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13,
-            alpha: CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.23))
-        attitudePanel.strokeColor = .cyan.withAlphaComponent(0.28)
-        attitudePanel.lineWidth = 0.7
-        attitudePanel.zPosition = 91
-        addChild(attitudePanel)
-        attitude.zPosition = 94
-        addChild(attitude)
-        layoutTelemetry()
-    }
-
-    private func layoutTelemetry() {
-        let right = size.width - 15
-        let panelWidth: CGFloat = min(232, max(190, size.width * 0.195))
-        let panelHeight: CGFloat = min(380, max(300, size.height * 0.52))
-        let top = size.height - 14
-        let panel = CGRect(x: right - panelWidth, y: top - panelHeight,
-                           width: panelWidth, height: panelHeight)
-        telemetryPanel.path = CGPath(roundedRect: panel, cornerWidth: 8, cornerHeight: 8, transform: nil)
-        telemetryAccent.path = CGPath(rect: CGRect(x:panel.minX+6,y:panel.minY+10,
-                                                  width:2,height:panelHeight-20),transform:nil)
-
-        // Explicit vertical hierarchy: score, wave, aircraft, tactical, systems.
-        let baseOffsets: [CGFloat] = [15,33,60,91,111,139,165,188,210,
-                                      232,251,276,296,316,331,348,364,379,394]
-        let scale = panelHeight / 410
-        let rightX = panel.maxX - 12
-        for (i, label) in telemetryLines.enumerated() {
-            label.position = CGPoint(x:rightX, y:panel.maxY - baseOffsets[i] * scale)
-            label.setScale(min(1, max(0.75, scale)))
-        }
-        for (i, offset) in [100.0, 177.0, 267.0].enumerated() {
-            telemetryRules[i].path = CGPath(rect: CGRect(
-                x: panel.minX + 16, y: panel.maxY - CGFloat(offset) * scale,
-                width: panelWidth - 29, height: 0.7), transform: nil)
-        }
-        let attitudeHeight: CGFloat = min(124, max(106, size.height * 0.16))
-        let attitudeRect = CGRect(x: panel.minX, y: panel.minY - 8 - attitudeHeight,
-                                  width:panelWidth,height:attitudeHeight)
-        attitudePanel.path = CGPath(roundedRect: attitudeRect, cornerWidth: 8, cornerHeight: 8,
-                                    transform:nil)
-        attitude.position = CGPoint(x:attitudeRect.midX,y:attitudeRect.midY)
-        attitude.setScale(min(1, attitudeHeight / 134))
-
-        let radarBottom: CGFloat = 12
-        let radarFrame = CGRect(x:panel.minX,y:radarBottom,width:panelWidth,
-                                height:max(100,attitudeRect.minY - radarBottom - 8))
-        radarPanel.path = CGPath(roundedRect:radarFrame,cornerWidth:8,cornerHeight:8,transform:nil)
-        radarRadius = min(84,(radarFrame.height - 24) / 2)
-        radarContacts.position = CGPoint(x:radarFrame.midX,y:radarFrame.midY - 4)
-        radarLegend.position = CGPoint(x:radarFrame.maxX - 11,y:radarFrame.maxY - 14)
-    }
-    private func updateRadar() {
-        if gameTime - lastRadarRender < 0.045 { return }
-        lastRadarRender = gameTime
-        updateAttitude()
-        radarContacts.removeAllChildren()
-        let radius = radarRadius
-        for fraction in [CGFloat(0.33), 0.66, 1] {
-            let ring = SKShapeNode(circleOfRadius: radius * fraction)
-            ring.strokeColor = .cyan.withAlphaComponent(0.17)
-            ring.fillColor = .clear
-            ring.lineWidth = 1
-            radarContacts.addChild(ring)
-        }
-        let north = SKShapeNode(rectOf: CGSize(width: 1, height: radius * 2))
-        north.fillColor = .cyan.withAlphaComponent(0.17)
-        north.strokeColor = .clear
-        radarContacts.addChild(north)
-        let east = SKShapeNode(rectOf: CGSize(width: radius * 2, height: 1))
-        east.fillColor = .cyan.withAlphaComponent(0.17)
-        east.strokeColor = .clear
-        radarContacts.addChild(east)
-        let center = SKShapeNode(circleOfRadius: 4)
-        center.fillColor = .cyan
-        center.strokeColor = .clear
-        radarContacts.addChild(center)
-        let sweepColor = SKColor.cyan.withAlphaComponent(CGFloat(prefs.object(forKey: "aces.radarBrightness") as? Double ?? 0.75))
-        for i in 0..<13 {
-            let angle = radarSweep - CGFloat(i) * 0.038
-            let p = CGMutablePath()
-            p.move(to: .zero)
-            p.addLine(to: CGPoint(x: cos(angle) * radius, y: sin(angle) * radius))
-            let ray = SKShapeNode(path: p)
-            ray.strokeColor = sweepColor.withAlphaComponent(CGFloat(13-i)/13 * 0.52)
-            ray.lineWidth = i == 0 ? 2.4 : 1.2
-            radarContacts.addChild(ray)
-        }
-        for bandit in bandits {
-            let dx = bandit.position.x - player.position.x
-            let dy = bandit.position.y - player.position.y
-            // Player-forward is always up on the radar.
-            let lateral = sin(heading) * dx - cos(heading) * dy
-            let ahead = cos(heading) * dx + sin(heading) * dy
-            // 2400 game-world units displayed out to the outer ring.
-            // Nonlinear radial compression preserves near-contact separation.
-            let actualRange = hypot(lateral,ahead)
-            if actualRange > radarRange { continue }
-            let rangeFraction = actualRange / radarRange
-            let renderedRadius = radius * pow(rangeFraction,0.77)
-            let px = actualRange > 0 ? (lateral / actualRange) * renderedRadius : 0
-            let py = actualRange > 0 ? (ahead / actualRange) * renderedRadius : 0
-            let contactSize: CGFloat = bandit.kind == 2 ? 4.0 : 3.1
-            let blip = SKShapeNode(circleOfRadius:contactSize * (1 - 0.30 * rangeFraction))
-            blip.position = CGPoint(x: px, y: py)
-            blip.fillColor = bandit.missionBomber ? .orange : .red
-            blip.strokeColor = bandit.missionBomber ? .yellow : .orange
-            blip.glowWidth = 1.5
-            let swept = (radarSweep - atan2(py, px)).truncatingRemainder(dividingBy: 2 * .pi)
-            let lag = swept < 0 ? swept + 2 * .pi : swept
-            blip.alpha = (0.18 + 0.82 * exp(-lag * 0.53)) * (1 - 0.42 * rangeFraction)
-            radarContacts.addChild(blip)
-        }
-        if playMode == .interception && missionStage == .active {
-            let deltaX = airfield.position.x - player.position.x
-            let deltaY = airfield.position.y - player.position.y
-            let lateral = sin(heading)*deltaX - cos(heading)*deltaY
-            let forward = cos(heading)*deltaX + sin(heading)*deltaY
-            let distance = hypot(lateral,forward)
-            if distance < radarRange {
-                let offset = radius * pow(distance / radarRange,0.77)
-                let marker = SKShapeNode(rectOf:CGSize(width:7,height:7),cornerRadius:1)
-                marker.fillColor = .green
-                marker.strokeColor = .white.withAlphaComponent(0.75)
-                marker.position = distance > 0 ?
-                    CGPoint(x:lateral/distance*offset,y:forward/distance*offset) : .zero
-                radarContacts.addChild(marker)
-            }
-        }
+    // The HUD is now composed of persistent graphical instruments, rather than
+    // the previous row of labels and the old radar/attitude panel.
+    private func installTelemetry() { hud.isHidden = true }
+    private func layoutTelemetry() { layoutGraphicalHUD() }
+    private func layoutGraphicalHUD() {
+        leftFlightHUD.layout(in:size)
+        rightCombatHUD.layout(in:size)
     }
 
     private func updateLabels() {
-        status.position = CGPoint(x:size.width/2,y:size.height*0.64)
-        // Important rear threats must remain readable outside the panel.
-        threat.position = CGPoint(x:size.width - 252,y:size.height - 29)
-        hud.text = "VECTOR ACES / WWII AIR COMBAT"
+        status.position=CGPoint(x:size.width/2,y:size.height*0.64)
+        threat.text = "" // Rear threat is expressed as the pulsing combat compass.
         if score > prefs.integer(forKey:"aces.bestScore") {
             prefs.set(score,forKey:"aces.bestScore")
         }
-        let degrees = Int((90 - heading * 180 / .pi).truncatingRemainder(dividingBy: 360) + 360) % 360
-        let contacts = bandits.filter {
-            hypot($0.position.x-player.position.x,$0.position.y-player.position.y) <= radarRange
-        }
-        let nearest = bandits.min { lhs,rhs in
-            hypot(lhs.position.x-player.position.x,lhs.position.y-player.position.y) <
-            hypot(rhs.position.x-player.position.x,rhs.position.y-player.position.y)
-        }
-        var bearingText = "NO CONTACT"
-        var rangeText = "RANGE  ---"
-        if let target = nearest {
-            let dx = target.position.x-player.position.x
-            let dy = target.position.y-player.position.y
-            let distance = hypot(dx,dy)
-            let relative = atan2(sin(atan2(dy,dx)-heading),cos(atan2(dy,dx)-heading))
-            // Positive relative angle is left of the aircraft. Clock numbers
-            // advance to the RIGHT, so the sign is deliberately inverted.
-            let hour = Int((12 - (relative * 6 / .pi)).rounded())
-            let clock = ((hour % 12) + 12) % 12
-            bearingText = String(format:"NEAREST  %02d O'CLOCK",clock == 0 ? 12 : clock)
-            rangeText = String(format:"RANGE  %04d UNITS",Int(distance.rounded()))
-        }
-        let airframe = max(0,health)
-        let ammoText = prefs.bool(forKey:"aces.unlimitedAmmo") ? "UNLIMITED" : String(ammo)
-        let altitudeBand = altitude < 3500 ? "LOW" : altitude < 15000 ? "COMBAT" : "HIGH"
-        let rate = Int(climbRate * 60)
-        let engine = airframe <= 1 ? "CRITICAL" : airframe <= fighter.health / 2 ? "DAMAGED" : "NORMAL"
-        // Arcade power indication reflects current usable speed, not engine manifold pressure.
-        let power = Int(max(0,min(100,(airspeed - 105) / max(1,fighter.speed - 10) * 100)))
-        let difficulty = ["ROOKIE","VETERAN","ACE"][min(2,max(0,prefs.integer(forKey:"aces.difficulty")))]
-        let rows = [
-            "VECTOR ACES  //  TELEMETRY",
-            "CURRENT SCORE",
-            String(format:"%06d",score),
-            String(format:"BEST  %06d",prefs.integer(forKey:"aces.bestScore")),
-            "CURRENT WAVE",
-            String(format:"%02d",wave),
-            String(format:"%02d KILLS   /   %02d CONTACTS",kills,contacts.count),
-            "AIRCRAFT STATUS",
-            "AIRFRAME  \(airframe)/\(fighter.health)",
-            "AMMO  \(ammoText)",
-            "\(Int(airspeed)) MPH  /  \(Int(altitude)) FT",
-            "TACTICAL AWARENESS",
-            bearingText,
-            rangeText,
-            "CONTACTS IN RANGE  \(contacts.count)",
-            "FLIGHT SYSTEMS",
-            "\(fighter.rawValue.uppercased())",
-            "HDG \(degrees)°  V/S \(rate >= 0 ? "+" : "")\(rate) FPM",
-            "ENERGY \(Int(flightEnergy))% / \(cloudCover ? "CLOUD" : altitudeBand) / \(engine)",
-        ]
-        for (i,label) in telemetryLines.enumerated() {
-            label.text = rows[i]
-            if i == 8 {
-                label.fontColor = airframe <= 1 ? .red : .cyan
-            }
-        }
-        // Priority guidance avoids crowding the Vector Drift-style panel.
+        tacticalCue.position=CGPoint(x:20,y:size.height-30)
         if altitude < 700 {
-            tacticalCue.text = "⚠ TERRAIN  /  PULL UP"
+            tacticalCue.text="⚠ PULL UP / TERRAIN"
             tacticalCue.fontColor = .orange
         } else if cloudCover {
-            tacticalCue.text = "CLOUD COVER  /  VISIBILITY REDUCED"
+            tacticalCue.text="CLOUD COVER"
             tacticalCue.fontColor = .cyan
         } else if climbRate < -35 && flightEnergy > 48 {
-            tacticalCue.text = "DIVE ATTACK  /  SPEED BONUS"
+            tacticalCue.text="DIVE ATTACK"
             tacticalCue.fontColor = .cyan
         } else if climbRate > 25 {
-            tacticalCue.text = "CLIMB  /  ENERGY DRAIN"
+            tacticalCue.text="CLIMB / ENERGY"
             tacticalCue.fontColor = .yellow
         } else {
-            tacticalCue.text = ""
+            tacticalCue.text=""
         }
-        // The external threat banner is governed by the combat AI and stays
-        // visible during the closest rear attack.
         updateGraphicalHUD()
     }
+
+    private func updateGraphicalHUD() {
+        let snapshot=AcesFlightHUDValue(
+            altitude:altitude,
+            verticalSpeed:climbRate,
+            speed:airspeed,
+            topSpeed:fighter.speed+(fighter == .thunderbolt ? 155 : 135),
+            energy:flightEnergy,
+            bank:bankAngle,
+            health:health,
+            maxHealth:fighter.health,
+            heading:heading,
+            cloud:cloudCover)
+        leftFlightHUD.render(snapshot)
+        let nearest=bandits.min(by: {
+            hypot($0.position.x-player.position.x,$0.position.y-player.position.y) <
+            hypot($1.position.x-player.position.x,$1.position.y-player.position.y)
+        })
+        var contacts:[AcesRadarContact]=[]
+        contacts.reserveCapacity(bandits.count+allies.count+1)
+        func addContact(_ position:CGPoint, bomber:Bool=false,
+                        ally:Bool=false, ace:Bool=false, objective:Bool=false) {
+            let dx=position.x-player.position.x
+            let dy=position.y-player.position.y
+            let lateral=sin(heading)*dx-cos(heading)*dy
+            let forward=cos(heading)*dx+sin(heading)*dy
+            contacts.append(AcesRadarContact(lateral:lateral,forward:forward,
+                            bomber:bomber,ally:ally,ace:ace,objective:objective))
+        }
+        for b in bandits {
+            addContact(b.position,bomber:b.kind==2,ace:b.isAce)
+        }
+        if playMode == .interception {
+            if campaignMission == .escort {
+                for i in allies.indices where allyHealth.indices.contains(i) && allyHealth[i]>0 {
+                    addContact(allies[i].position,bomber:true,ally:true)
+                }
+            } else if campaignMission == .stukas || campaignMission == .bridge {
+                addContact(airfield.position,objective:true)
+            }
+        }
+        let dx=nearest.map{$0.position.x-player.position.x} ?? 0
+        let dy=nearest.map{$0.position.y-player.position.y} ?? 0
+        let distance=nearest.map{_ in hypot(dx,dy)}
+        let bearing=nearest.map{_ in
+            atan2(sin(atan2(dy,dx)-heading),cos(atan2(dy,dx)-heading))
+        }
+        let altitudeDelta=nearest.map{$0.altitude-altitude}
+        let rear=bandits.contains { b in
+            let x=b.position.x-player.position.x
+            let y=b.position.y-player.position.y
+            return hypot(x,y)<530 && cos(heading)*x+sin(heading)*y < -80 &&
+                abs(b.altitude-altitude)<1000
+        }
+        let total:Int
+        let done:Int
+        let objectiveMax:Int
+        let objectiveHealth:Int
+        let missionTitle:String
+        let secondsRemaining:CGFloat?
+        let fraction:CGFloat
+        if playMode == .endless {
+            total=8
+            done=min(8,kills % 8)
+            objectiveMax=3
+            objectiveHealth=3
+            missionTitle="ENDLESS / KILLS"
+            secondsRemaining=nil
+            fraction=1
+        } else {
+            switch campaignMission {
+            case .stukas:
+                total=6;done=bomberDestroyed
+                objectiveMax=3;objectiveHealth=airfieldHealth
+            case .bridge:
+                total=8;done=bomberDestroyed
+                objectiveMax=3;objectiveHealth=airfieldHealth
+            case .escort:
+                total=3;done=allyHealth.filter{$0>0}.count
+                objectiveMax=3;objectiveHealth=done
+            case .ace:
+                total=1;done=eliteDown ? 1 : 0
+                objectiveMax=3;objectiveHealth=min(3,max(0,health))
+            }
+            missionTitle="M\(campaignMission.rawValue) / \(campaignMission.title)"
+            secondsRemaining=max(0,campaignMission.duration-missionTime)
+            fraction=max(0,1-missionTime/max(1,campaignMission.duration))
+        }
+        let combat=AcesCombatHUDValue(
+            score:score,wave:wave,kills:kills,
+            ammo:ammo,ammoMax:fighter.ammunition,
+            unlimitedAmmo:prefs.bool(forKey:"aces.unlimitedAmmo"),
+            recentlyFired:gameTime-lastFire<0.17,
+            targetBearing:bearing,targetRange:distance,
+            targetAltitudeDelta:altitudeDelta,
+            targetClosing:nearest.map{$0.previousDistance > hypot(dx,dy)} ?? false,
+            targetIsAce:nearest?.isAce ?? false,
+            contacts:contacts,radarRange:radarRange,radarSweep:radarSweep,
+            rearThreat:rear,missionTitle:missionTitle,missionDone:done,
+            missionTotal:total,objectiveHealth:objectiveHealth,
+            objectiveMax:objectiveMax,secondsRemaining:secondsRemaining,
+            missionFraction:fraction)
+        rightCombatHUD.render(combat,time:gameTime)
+    }
+
     func restart() {
         for b in bandits { b.sprite.removeFromParent() }
         for r in rounds { r.sprite.removeFromParent() }
