@@ -616,7 +616,7 @@ private struct AcesGameWindow: View {
                             Text("VECTOR ACES")
                                 .font(.system(size:19,weight:.black,design:.monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.14a")
+                            Text("v2026.11.14b")
                                 .font(.system(size:10,weight:.medium,design:.monospaced))
                                 .foregroundStyle(.gray)
                         }
@@ -679,7 +679,7 @@ private struct AcesGameWindow: View {
             HStack(spacing:10) {
                 Text("← → Turn   ↑ Accelerate   ↓ Brake   Q Climb   E Descend   Space Fire   P Pause   Return Restart")
                 Spacer(minLength:4)
-                Text("Terrain: original continuous aerial landscape")
+                Text("VIEW 3.2×  /  CONTINUOUS AERIAL LANDSCAPE")
                     .foregroundStyle(.white.opacity(0.45))
             }
             .font(.system(size:10,weight:.bold,design:.monospaced))
