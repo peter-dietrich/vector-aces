@@ -1376,6 +1376,31 @@ private final class AirBattleScene: SKScene {
         airfield.name = "airfield"
         airfield.position = CGPoint(x:size.width * 0.76,y:size.height * 0.39)
         airfield.zPosition = -3
+        if campaignMission == .bridge {
+            let river = SKShapeNode(rectOf:CGSize(width:110,height:290),cornerRadius:15)
+            river.fillColor = SKColor(red:0.16,green:0.37,blue:0.51,alpha:0.92)
+            river.strokeColor = .cyan.withAlphaComponent(0.24)
+            airfield.addChild(river)
+            let road = SKShapeNode(rectOf:CGSize(width:270,height:36),cornerRadius:3)
+            road.fillColor = SKColor(red:0.41,green:0.39,blue:0.34,alpha:1)
+            road.strokeColor = .white.withAlphaComponent(0.45)
+            airfield.addChild(road)
+            for x in [-65,0,65] {
+                let pylon = SKShapeNode(rectOf:CGSize(width:8,height:58))
+                pylon.position.x = CGFloat(x)
+                pylon.fillColor = .gray
+                pylon.strokeColor = .white.withAlphaComponent(0.3)
+                airfield.addChild(pylon)
+            }
+            let marker = SKLabelNode(fontNamed:"Menlo-Bold")
+            marker.text = "STRATEGIC BRIDGE"
+            marker.fontSize = 11
+            marker.fontColor = .yellow
+            marker.position = CGPoint(x:0,y:96)
+            airfield.addChild(marker)
+            environment.addChild(airfield)
+            return
+        }
         let outer = SKShapeNode(rectOf:CGSize(width:238,height:151),cornerRadius:9)
         outer.fillColor = SKColor(red:0.26,green:0.35,blue:0.23,alpha:0.8)
         outer.strokeColor = SKColor(red:0.8,green:0.8,blue:0.55,alpha:0.4)
