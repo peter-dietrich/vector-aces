@@ -111,3 +111,12 @@
 - Mission scores are deliberately arcade/approximate; not historically sourced aircraft performance metrics.
 - **Mac gameplay QA required:** test missions one by one, verify unlocks, stars, medal awards, ace kill, allied bomber survival under escort attacks, bridge damage and win/loss. Validate that switching to Endless preserves the older experience and save/resume.
 - GitHub Actions macOS Xcode CI compiles code, but cannot validate gameplay balance, mission pacing, precise AI tactics or visuals.
+
+## Graphical HUD refactor — November 13, 2026
+- Replaced the old text-heavy right telemetry and duplicated attitude/radar blocks with two independent SpriteKit HUD node classes in `Sources/VectorAcesApp.swift`: `LeftFlightHUDNode` and `RightCombatHUDNode`.
+- Left: large bank/pitch horizon, airspeed dial and energy arc, moving altimeter tape/vertical speed indicator, aircraft silhouette with damage-based color and condition pips.
+- Right: prominently displayed score, wave and kill/contact count; target-bearing compass with rear-threat pulse, ammo counter and ammo bar, mission progress pips/objective health shield, countdown arc, enlarged long-range 2400-unit radar showing enemy fighters, bombers, ace, allies and mission objective.
+- Graphical primitives use reusable `AcesHUDVisual` helpers. Values from live scene state are delivered via `AcesFlightHUDValue` and `AcesCombatHUDValue`. Persistent nodes and refreshed radar contacts avoid rebuilding every panel each frame.
+- Original top SwiftUI header and bottom control footer retained. Gameplay and mission/Endless state unchanged; mission status moved to upper center for clearance.
+- Inspect Mac screenshots at 1000×670 minimum and full screen, tune HUD transparency and gauge sizing. Confirm radar, targets, mission progress and alerts are understandable visually.
+- **Important:** macOS CI build must be checked on latest commit; several intermediate commits failed Swift syntax and were repaired. Do not claim a passing build until latest successful check.
