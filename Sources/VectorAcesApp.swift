@@ -616,7 +616,7 @@ private struct AcesGameWindow: View {
                             Text("VECTOR ACES")
                                 .font(.system(size:19,weight:.black,design:.monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.14b")
+                            Text("v2026.11.14c")
                                 .font(.system(size:10,weight:.medium,design:.monospaced))
                                 .foregroundStyle(.gray)
                         }
@@ -1749,6 +1749,10 @@ private final class AirBattleScene: SKScene {
         escortWaveIndex = 0
         clearMissionAllies()
         if campaignMission == .escort { spawnAlliedBombers() }
+        // First bomber flight is available to the radar immediately upon launch.
+        if campaignMission == .stukas || campaignMission == .bridge {
+            spawnMissionBomberPair()
+        }
         keys.removeAll()
         status.text = ""
         view?.window?.makeFirstResponder(self)
