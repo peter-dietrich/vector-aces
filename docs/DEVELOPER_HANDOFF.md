@@ -127,3 +127,10 @@
 - Mission widget now uses compact names (M1/STUKAS etc.) rather than overflowing campaign titles, and tightened progress, objective shield, and countdown spacing.
 - Left altimeter, vertical speed and cloud-cover annotations aligned/shortened to avoid crowding near the flight panel edge.
 - Continue comparing live screenshots at minimum and typical macOS window sizes. Review text overlaps when contacts and objective values change during a sortie, not only the briefing.
+
+## Strategic wide-field zoom — v2026.11.14b
+- Implemented a **3.2× world field-of-view** by drawing the entire battlefield in a zoomed-out SpriteKit parent node. The top SwiftUI header, bottom controls, left Flight HUD, right Combat HUD, mission briefing, and scene labels remain full screen resolution.
+- Player/enemy aircraft and bullet graphics gain moderate independent size compensation so they remain distinguishable at the wider viewing distance; gameplay positions, velocities, targeting, altitude and bullet collision physics remain in unscaled world coordinates.
+- Terrain streaming now calculates intersecting tile columns/rows from the camera center and visible size * 3.2; 320-pixel per 1024-world-unit terrain textures approximate the zoomed-out screen pixel density, limiting memory/CPU load. The game loads necessary initial terrain and streams additional new tiles incrementally.
+- Cloud positions/wrapping, off-screen enemy cleanup, and Endless formation spawn locations expand to the new world viewport. The radar remains 2400 world units; more of a distant formation may appear both in gameplay and on radar.
+- Footer identifies `VIEW 3.2×`. Validate mission 1 first interception time, whether enemy planes can be identified and tracked, smooth terrain loading near edges, performance on long flights, squadron interception and all four campaign missions. Screenshot/flight playtest required; build success alone does not validate terrain FPS.
