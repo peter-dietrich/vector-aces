@@ -1354,7 +1354,6 @@ private final class AirBattleScene: SKScene {
         if success { score += airfieldHealth*400 + Int(max(0,missionLimit-missionTime))*12 }
         let rating = success ? (airfieldHealth == 3 ? "THREE STARS" :
                               airfieldHealth == 2 ? "TWO STARS" : "ONE STAR") : "MISSION FAILED"
-        let accuracy = bomberDestroyed
         let lines = [
             success ? "MISSION COMPLETE  //  VICTORY" : "MISSION FAILED  //  RETREAT",
             reason,
@@ -2001,13 +2000,29 @@ private final class AirBattleScene: SKScene {
             let contactSize: CGFloat = bandit.kind == 2 ? 4.0 : 3.1
             let blip = SKShapeNode(circleOfRadius:contactSize * (1 - 0.30 * rangeFraction))
             blip.position = CGPoint(x: px, y: py)
-            blip.fillColor = .orange
-            blip.strokeColor = .red
+            blip.fillColor = bandit.missionBomber ? .orange : .red
+            blip.strokeColor = bandit.missionBomber ? .yellow : .orange
             blip.glowWidth = 1.5
             let swept = (radarSweep - atan2(py, px)).truncatingRemainder(dividingBy: 2 * .pi)
             let lag = swept < 0 ? swept + 2 * .pi : swept
             blip.alpha = (0.18 + 0.82 * exp(-lag * 0.53)) * (1 - 0.42 * rangeFraction)
             radarContacts.addChild(blip)
+        }
+        if playMode == .interception && missionStage == .active {
+            let deltaX = airfield.position.x - player.position.x
+            let deltaY = airfield.position.y - player.position.y
+            let lateral = sin(heading)*deltaX - cos(heading)*deltaY
+            let forward = cos(heading)*deltaX + sin(heading)*deltaY
+            let distance = hypot(lateral,forward)
+            if distance < radarRange {
+                let offset = radius * pow(distance / radarRange,0.77)
+                let marker = SKShapeNode(rectOf:CGSize(width:7,height:7),cornerRadius:1)
+                marker.fillColor = .green
+                marker.strokeColor = .white.withAlphaComponent(0.75)
+                marker.position = distance > 0 ?
+                    CGPoint(x:lateral/distance*offset,y:forward/distance*offset) : .zero
+                radarContacts.addChild(marker)
+            }
         }
     }
 
@@ -2092,8 +2107,10 @@ private final class AirBattleScene: SKScene {
         comboDeadline = 0
         threat.text = ""
         lastFire = -1
-        prefs.set(false, forKey: "aces.hasSave")
-        prefs.removeObject(forKey: "aces.savedRun")
+        if playMode == .endless {
+            prefs.set(false, forKey: "aces.hasSave")
+            prefs.removeObject(forKey: "aces.savedRun")
+        }
         health = fighter.health
         deathStarted = false
         player.removeAllActions()
@@ -2120,6 +2137,17 @@ private final class AirBattleScene: SKScene {
         pausedGame = false
         invulnerableUntil = 0
         status.text = ""
+        if playMode == .interception {
+            missionTime = 0
+            bomberLaunched = 0
+            bomberDestroyed = 0
+            bomberEscaped = 0
+            airfieldHealth = 3
+            missionEscortKills = 0
+            missionHitsTaken = 0
+            configureAirfield()
+            showMissionBriefing()
+        }
         if prefs.object(forKey:"aces.soundEnabled") as? Bool ?? true {
             sounds.startEngine(volume:effectsVolume * 0.18)
         }
