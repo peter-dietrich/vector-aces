@@ -383,6 +383,7 @@ private struct AcesGameWindow: View {
                             scene.setSoundEnabled(newValue)
                         }
                     Button("Hangar") { onHangar() }
+                        .keyboardShortcut(.escape,modifiers:[])
                     Button("New Game") { scene.restart() }
                         .buttonStyle(.borderedProminent)
                         .tint(.cyan)
@@ -1654,7 +1655,7 @@ private final class AirBattleScene: SKScene {
         for (index, label) in telemetryLines.enumerated() { label.text = rows[index] }
         updateRadar()
     }
-    private func restart() {
+    func restart() {
         for b in bandits { b.sprite.removeFromParent() }
         for r in rounds { r.sprite.removeFromParent() }
         bandits.removeAll()
