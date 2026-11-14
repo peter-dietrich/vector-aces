@@ -1577,14 +1577,122 @@ private final class AirBattleScene: SKScene {
 
     private func updateMissionSpawns() {
         guard missionStage == .active else { return }
-        let schedule: [CGFloat] = [2,30,58]
-        let next = bomberLaunched / 2
-        if next < schedule.count && missionTime >= schedule[next] {
-            spawnMissionBomberPair()
+        switch campaignMission {
+        case .stukas, .bridge:
+            let schedule: [CGFloat] = campaignMission == .stukas ? [2,30,58] : [2,24,46,68]
+            let next = bomberLaunched / 2
+            if next < schedule.count && missionTime >= schedule[next] {
+                spawnMissionBomberPair()
+            }
+            let objective = campaignMission == .bridge ? "BRIDGE" : "AIRFIELD"
+            let total = campaignMission == .bridge ? 8 : 6
+            missionText.text = String(format:"%@ %d/3  //  DOWN %d/%d  //  TIME %03d",
+                objective,airfieldHealth,bomberDestroyed,total,
+                Int(max(0,campaignMission.duration-missionTime)))
+        case .escort:
+            let schedule: [CGFloat] = [2,26,50,74]
+            if let next = schedule.first(where: { missionTime >= $0 && missionTime-$0 < 0.05 }) {
+                _ = next
+                spawnCampaignFighters(count:2,elite:false)
+            }
+            updateAlliedEscort()
+            missionText.text = "B-17 SURVIVORS \(allyHealth.filter{$0>0}.count)/3  //  TIME \(Int(max(0,campaignMission.duration-missionTime)))"
+        case .ace:
+            if !eliteLaunched && missionTime >= 2 {
+                spawnCampaignFighters(count:3,elite:true)
+                eliteLaunched = true
+            }
+            missionText.text = "ENEMY ACE \(eliteDown ? "DOWN" : "ACTIVE")  //  TIME \(Int(max(0,campaignMission.duration-missionTime)))"
         }
-        missionText.text = String(format:"AIRFIELD %d/3  //  STUKAS DOWN %d/6  //  ESCAPED %d  //  TIME %03d",
-                                  airfieldHealth,bomberDestroyed,bomberEscaped,
-                                  Int(max(0,missionLimit-missionTime)))
+    }
+
+    private func clearMissionAllies() {
+        for ally in allies { ally.removeFromParent() }
+        allies.removeAll()
+        allyHealth.removeAll()
+    }
+
+    private func spawnAlliedBombers() {
+        for i in 0..<3 {
+            let node = SKNode()
+            node.position = CGPoint(x:size.width*0.34 + CGFloat(i)*64,
+                                    y:size.height*0.35 + CGFloat(i)*100)
+            node.zPosition = 16
+            let aircraft = drawAircraft(kind:2,color:SKColor(red:0.66,green:0.72,blue:0.77,alpha:1))
+            node.addChild(aircraft)
+            node.setScale(1.12)
+            node.zRotation = -.pi/2
+            addChild(node)
+            allies.append(node)
+            allyHealth.append(3)
+        }
+    }
+
+    private func updateAlliedEscort() {
+        for i in allies.indices where allyHealth[i] > 0 {
+            let node = allies[i]
+            node.position.x += 1.0
+            node.position.y += sin(missionTime*0.7+CGFloat(i))*0.3
+        }
+        if missionTime-lastAllyAttack < 2.8 { return }
+        lastAllyAttack = missionTime
+        // An enemy close enough to the formation can make an attack pass.
+        for i in allies.indices where allyHealth[i] > 0 {
+            let nearest = bandits.filter { !$0.missionBomber }.map {
+                hypot($0.position.x-allies[i].position.x,
+                      $0.position.y-allies[i].position.y)
+            }.min() ?? .greatestFiniteMagnitude
+            if nearest < 270 {
+                allyHealth[i] -= 1
+                burst(at:allies[i].position,count:10)
+                if allyHealth[i] <= 0 {
+                    crashPlane(allies[i],position:allies[i].position,duration:1.2)
+                    flash("ALLIED BOMBER LOST")
+                } else {
+                    flash("B-17 UNDER ATTACK")
+                }
+                break
+            }
+        }
+    }
+
+    private func spawnCampaignFighters(count: Int, elite: Bool) {
+        let flight = nextFlightID
+        nextFlightID += 1
+        let center = CGPoint(x:player.position.x + CGFloat.random(in:560...800),
+                             y:player.position.y + CGFloat.random(in:-320...320))
+        for i in 0..<count {
+            let point = CGPoint(x:center.x+CGFloat(i)*62,
+                                y:center.y+CGFloat(i-1)*85)
+            let kind = elite && i == 0 ? 0 : i % 2
+            let sprite = SKNode()
+            sprite.position = point
+            sprite.zPosition = 15
+            sprite.addChild(drawAircraft(kind:kind,color:elite && i == 0 ?
+                SKColor(red:0.72,green:0.24,blue:0.20,alpha:1) :
+                SKColor(red:0.44,green:0.47,blue:0.43,alpha:1)))
+            sprite.setScale(elite && i == 0 ? 1.12 : 0.88)
+            addChild(sprite)
+            let direction = atan2(player.position.y-point.y,player.position.x-point.x)
+            sprite.zRotation = direction - .pi/2
+            var enemy = Bandit(sprite:sprite,position:point,heading:direction,
+                               speed:elite && i == 0 ? 282 : 244,
+                               health:elite && i == 0 ? 9 : 2,
+                               kind:kind,formationTime:1.4,
+                               fireCooldown:elite && i == 0 ? 1.0 : 2.2,
+                               targetOffset:CGFloat.random(in:-0.7...0.7),
+                               tactic:.formation,tacticTime:0,
+                               maneuverSign:i%2 == 0 ? 1 : -1,
+                               entryHeading:direction,previousDistance:700)
+            enemy.role = kind == 1 ? .interceptor : .hunter
+            enemy.flightID = flight
+            enemy.wingIndex = i
+            enemy.altitude = altitude + CGFloat.random(in:-300...300)
+            enemy.sizeAtSpawn = sprite.xScale
+            if elite && i == 0 { enemy.attackPasses = -99 }
+            bandits.append(enemy)
+        }
+        flash(elite ? "RED ACE DETECTED — PRIORITY TARGET" : "HOSTILE FIGHTERS APPROACHING")
     }
 
     private func advanceMissionBomber(_ b: inout Bandit,
