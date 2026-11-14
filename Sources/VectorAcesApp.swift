@@ -67,6 +67,101 @@ private enum AcesPlayMode: String {
     case endless
 }
 
+private enum AcesCampaignMission: Int, CaseIterable, Identifiable {
+    case stukas = 1
+    case escort = 2
+    case ace = 3
+    case bridge = 4
+    var id: Int { rawValue }
+    var title: String {
+        switch self {
+        case .stukas: return "STOP THE STUKAS"
+        case .escort: return "BOMBER ESCORT"
+        case .ace: return "HUNT THE ACE"
+        case .bridge: return "DEFEND THE BRIDGE"
+        }
+    }
+    var objective: String {
+        switch self {
+        case .stukas: return "DOWN 4 OF 6 STUKAS BEFORE AIRFIELD STRIKE"
+        case .escort: return "KEEP 2 OF 3 ALLIED BOMBERS ALIVE"
+        case .ace: return "DEFEAT THE ENEMY ACE BEFORE ESCAPE"
+        case .bridge: return "STOP 5 OF 8 DIVE BOMBERS"
+        }
+    }
+    var overview: String {
+        switch self {
+        case .stukas: return "Intercept incoming Stukas and protect the allied airfield."
+        case .escort: return "Escort three allied B-17s against repeated fighter attacks."
+        case .ace: return "Track and defeat an elite German pilot with two wingmen."
+        case .bridge: return "Save the strategic bridge against four fast bomber waves."
+        }
+    }
+    var duration: CGFloat {
+        switch self {
+        case .stukas: return 150
+        case .escort: return 95
+        case .ace: return 125
+        case .bridge: return 155
+        }
+    }
+}
+private enum AcesPilotLog {
+    private static let store = UserDefaults.standard
+    static var unlocked: Int { max(1,store.integer(forKey:"aces.campaign.unlocked")) }
+    static func stars(for mission: AcesCampaignMission) -> Int {
+        store.integer(forKey:"aces.campaign.stars.\(mission.rawValue)")
+    }
+    static func best(for mission: AcesCampaignMission) -> Int {
+        store.integer(forKey:"aces.campaign.best.\(mission.rawValue)")
+    }
+    static var rank: String {
+        let wins = store.integer(forKey:"aces.campaign.wins")
+        let kills = store.integer(forKey:"aces.campaign.kills")
+        if wins >= 4 && kills >= 25 { return "SQUADRON LEADER" }
+        if wins >= 3 && kills >= 16 { return "MAJOR" }
+        if wins >= 2 && kills >= 10 { return "CAPTAIN" }
+        if wins >= 1 { return "LIEUTENANT" }
+        return "FLIGHT OFFICER"
+    }
+    static var medals: [(Int,String)] {
+        [(1,"FIRST VICTORY"),(2,"GUARDIAN"),(4,"ACE HUNTER"),
+         (8,"CAMPAIGN VETERAN"),(16,"PERFECT SORTIE")]
+    }
+    @discardableResult
+    static func record(mission: AcesCampaignMission, victory: Bool,
+                       score: Int, kills: Int, stars: Int,
+                       damage: Int) -> [String] {
+        store.set(store.integer(forKey:"aces.campaign.sorties")+1,forKey:"aces.campaign.sorties")
+        store.set(store.integer(forKey:"aces.campaign.kills")+kills,forKey:"aces.campaign.kills")
+        store.set(store.integer(forKey:"aces.campaign.score")+score,forKey:"aces.campaign.score")
+        var newMedals: [String] = []
+        if victory {
+            store.set(store.integer(forKey:"aces.campaign.wins")+1,forKey:"aces.campaign.wins")
+            let bestKey = "aces.campaign.best.\(mission.rawValue)"
+            let starKey = "aces.campaign.stars.\(mission.rawValue)"
+            store.set(max(score,store.integer(forKey:bestKey)),forKey:bestKey)
+            store.set(max(stars,store.integer(forKey:starKey)),forKey:starKey)
+            if mission.rawValue < 4 {
+                store.set(max(unlocked,mission.rawValue+1),forKey:"aces.campaign.unlocked")
+            }
+        }
+        let wins = store.integer(forKey:"aces.campaign.wins")
+        let completed = AcesCampaignMission.allCases.filter { self.stars(for:$0)>0 }.count
+        var requested = 0
+        if wins > 0 { requested |= 1 }
+        if victory && (mission == .stukas || mission == .escort || mission == .bridge) && stars == 3 { requested |= 2 }
+        if victory && mission == .ace { requested |= 4 }
+        if completed == 4 { requested |= 8 }
+        if victory && damage == 0 { requested |= 16 }
+        let previous = store.integer(forKey:"aces.campaign.medals")
+        let awards = previous | requested
+        store.set(awards,forKey:"aces.campaign.medals")
+        newMedals = medals.filter { awards & $0.0 != 0 && previous & $0.0 == 0 }.map(\.1)
+        return newMedals
+    }
+}
+
 private enum AcesStyle {
     static let ice = Color(red: 0.5, green: 0.88, blue: 0.98)
     static let amber = Color(red: 1, green: 0.72, blue: 0.37)
