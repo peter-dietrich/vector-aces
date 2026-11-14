@@ -55,3 +55,13 @@
 - Apply code edits directly through the connected GitHub tool, then give precise `git pull` and `open`/Xcode commands.
 - Keep brief phase/status updates grounded in actual changes.
 - User prefers early warning when a thread is approaching capacity and complete copy-forward prompts into new conversations.
+
+## Latest telemetry/radar redesign (2026-11-13)
+- Replaced flat seven-line telemetry with 19 data rows grouped into mission, aircraft, tactical, and flight systems sections.
+- Typography mirrors Vector Drift's Menlo, cyan score and high-importance numerics, amber section headings, muted supporting text, thin lines, and vertical amber accent.
+- Added saved best score, wave/kills/contacts, airframe/ammo, speed/altitude, heading/vertical speed, altitude band and health-derived engine-status label.
+- Added nearest hostile clock bearing and world-space range as well as contact count within radar radius.
+- Radar detection radius is 2400 game-world units (previously ~530), with nonlinear distance compression, dimmer/smaller distant contacts, preserved rotating sweep and contact decay.
+- Real-world yards are intentionally **not** claimed: units represent simulated game-world distance.
+- Existing attitude instrument and radar remain below the telemetry section; gameplay and top/bottom header/footer controls remain unchanged.
+- Validate that the right-side instruments remain legible at the minimum scene/window size; radar and telemetry only compile-tested by CI, not runtime/visual-tested.
