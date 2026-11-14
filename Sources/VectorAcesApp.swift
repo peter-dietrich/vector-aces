@@ -2050,6 +2050,78 @@ private final class AirBattleScene: SKScene {
         attitude.addChild(label)
     }
 
+    // MARK: Phase 3 tactical vision and predictive gunnery
+    // Clouds use the same camera-relative positions as the aircraft.
+    // Check altitude too: crossing a cloud on the map is not concealment
+    // when the aircraft is well above or below its layer.
+    private func coveredByCloud(_ point: CGPoint, altitude targetAltitude: CGFloat) -> Bool {
+        for (index, cloud) in cloudClusters.enumerated() {
+            guard index < cloudAltitudes.count,
+                  abs(targetAltitude - cloudAltitudes[index]) < 750,
+                  let sprite = cloud as? SKSpriteNode else { continue }
+            let dx = point.x - cloud.position.x
+            let dy = point.y - cloud.position.y
+            let x = max(1, sprite.size.width * 0.35)
+            let y = max(1, sprite.size.height * 0.31)
+            if (dx * dx)/(x * x) + (dy * dy)/(y * y) < 1 { return true }
+        }
+        return false
+    }
+
+    private func configureLeadCue() {
+        leadCue.zPosition = 104
+        leadCue.isHidden = true
+        let ring = SKShapeNode(circleOfRadius: 12)
+        ring.strokeColor = SKColor.cyan.withAlphaComponent(0.76)
+        ring.lineWidth = 1.3
+        ring.fillColor = .clear
+        leadCue.addChild(ring)
+        for delta in [CGFloat(0), .pi / 2, .pi, .pi * 1.5] {
+            let path = CGMutablePath()
+            path.move(to:CGPoint(x:cos(delta)*15,y:sin(delta)*15))
+            path.addLine(to:CGPoint(x:cos(delta)*21,y:sin(delta)*21))
+            let dash = SKShapeNode(path:path)
+            dash.strokeColor = .cyan.withAlphaComponent(0.6)
+            dash.lineWidth = 1.2
+            leadCue.addChild(dash)
+        }
+        addChild(leadCue)
+    }
+
+    private func updateLeadCue() {
+        leadCue.isHidden = true
+        guard !bandits.isEmpty else { return }
+        let projectileSpeed: CGFloat = 790
+        var closestPosition: CGPoint?
+        var closestDistance: CGFloat = .greatestFiniteMagnitude
+        var alignedAltitude = false
+        for target in bandits {
+            let dx = target.position.x-player.position.x
+            let dy = target.position.y-player.position.y
+            let distance = hypot(dx,dy)
+            if distance >= 760 || distance >= closestDistance { continue }
+            let relative = atan2(sin(atan2(dy,dx)-heading),
+                                 cos(atan2(dy,dx)-heading))
+            if abs(relative) > 0.55 { continue }
+            closestDistance = distance
+            closestPosition = target.position
+            alignedAltitude = abs(target.altitude-altitude) < 760
+        }
+        guard let selected = closestPosition else { return }
+        // Estimate interception using target heading and speed. This is a
+        // leading reference, not a lock-on; the user must still fly and aim.
+        guard let target = bandits.min(by:{
+            hypot($0.position.x-selected.x,$0.position.y-selected.y) <
+            hypot($1.position.x-selected.x,$1.position.y-selected.y)
+        }) else { return }
+        let travelTime = min(0.85, closestDistance / projectileSpeed)
+        let aimPoint = CGPoint(x:selected.x + cos(target.heading)*target.speed*travelTime,
+                               y:selected.y + sin(target.heading)*target.speed*travelTime)
+        leadCue.position = aimPoint
+        leadCue.isHidden = !alignedAltitude || cloudCover ||
+            coveredByCloud(target.position,altitude:target.altitude)
+    }
+
     private func installTelemetry() {
         hud.isHidden = true // SwiftUI header and footer own their navigation text.
         let ice = SKColor(calibratedRed: 0.12, green: 0.91, blue: 0.99, alpha: 1)
