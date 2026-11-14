@@ -1908,7 +1908,8 @@ private final class AirBattleScene: SKScene {
             "altitude":Double(altitude), "airspeed":Double(airspeed),
             "heading":Double(heading), "playerX":Double(player.position.x),
             "playerY":Double(player.position.y),
-            "offsetX":Double(terrainOffset.x), "offsetY":Double(terrainOffset.y)
+            "offsetX":Double(terrainOffset.x), "offsetY":Double(terrainOffset.y),
+            "energy":Double(flightEnergy)
         ]
         prefs.set(snapshot, forKey:"aces.savedRun")
         prefs.set(true, forKey:"aces.hasSave")
@@ -1923,6 +1924,7 @@ private final class AirBattleScene: SKScene {
         gameTime = CGFloat(saved["elapsed"] as? Double ?? 0)
         altitude = CGFloat(saved["altitude"] as? Double ?? 7600)
         airspeed = CGFloat(saved["airspeed"] as? Double ?? 210)
+        flightEnergy = CGFloat(saved["energy"] as? Double ?? 68)
         heading = CGFloat(saved["heading"] as? Double ?? (.pi/2))
         player.position = CGPoint(x:CGFloat(saved["playerX"] as? Double ?? Double(size.width/2)),
                                   y:CGFloat(saved["playerY"] as? Double ?? Double(size.height/2)))
@@ -2363,13 +2365,29 @@ private final class AirBattleScene: SKScene {
             "FLIGHT SYSTEMS",
             "\(fighter.rawValue.uppercased())",
             "HDG \(degrees)°  V/S \(rate >= 0 ? "+" : "")\(rate) FPM",
-            "\(altitudeBand) ALT  /  PWR \(power)%  /  \(engine)",
+            "ENERGY \(Int(flightEnergy))% / \(cloudCover ? "CLOUD" : altitudeBand) / \(engine)",
         ]
         for (i,label) in telemetryLines.enumerated() {
             label.text = rows[i]
             if i == 8 {
                 label.fontColor = airframe <= 1 ? .red : .cyan
             }
+        }
+        // Priority guidance avoids crowding the Vector Drift-style panel.
+        if altitude < 700 {
+            tacticalCue.text = "⚠ TERRAIN  /  PULL UP"
+            tacticalCue.fontColor = .orange
+        } else if cloudCover {
+            tacticalCue.text = "CLOUD COVER  /  VISIBILITY REDUCED"
+            tacticalCue.fontColor = .cyan
+        } else if climbRate < -35 && flightEnergy > 48 {
+            tacticalCue.text = "DIVE ATTACK  /  SPEED BONUS"
+            tacticalCue.fontColor = .cyan
+        } else if climbRate > 25 {
+            tacticalCue.text = "CLIMB  /  ENERGY DRAIN"
+            tacticalCue.fontColor = .yellow
+        } else {
+            tacticalCue.text = ""
         }
         // The external threat banner is governed by the combat AI and stays
         // visible during the closest rear attack.
@@ -2411,6 +2429,11 @@ private final class AirBattleScene: SKScene {
         kills = 0
         wave = 1
         airspeed = 210
+        flightEnergy = 68
+        cloudCover = false
+        lastTerrainAlert = -100
+        leadCue.isHidden = true
+        tacticalCue.text = ""
         heading = .pi / 2
         player.position = CGPoint(x: size.width / 2, y: size.height / 2)
         keys.removeAll()
