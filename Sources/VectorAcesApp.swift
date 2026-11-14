@@ -296,10 +296,91 @@ private struct AcesSettings: View {
         .frame(minWidth:540,minHeight:560)
     }
 }
+private struct AcesPilotRecordSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    private let store = UserDefaults.standard
+    var body: some View {
+        ScrollView {
+            VStack(alignment:.leading,spacing:16) {
+                HStack {
+                    VStack(alignment:.leading,spacing:6) {
+                        Text("VECTOR ACES / PERSONNEL FILE")
+                            .font(.system(size:11,weight:.bold,design:.monospaced))
+                            .foregroundStyle(AcesStyle.amber)
+                        Text(AcesPilotLog.rank.uppercased())
+                            .font(.system(size:28,weight:.black,design:.monospaced))
+                    }
+                    Spacer()
+                    Image(systemName:"medal.star.fill")
+                        .font(.system(size:38))
+                        .foregroundStyle(AcesStyle.amber)
+                }
+                HStack(spacing:16) {
+                    recordStatistic("SORTIES",store.integer(forKey:"aces.campaign.sorties"))
+                    recordStatistic("VICTORIES",store.integer(forKey:"aces.campaign.wins"))
+                    recordStatistic("HOSTILES",store.integer(forKey:"aces.campaign.kills"))
+                    recordStatistic("TOTAL SCORE",store.integer(forKey:"aces.campaign.score"))
+                }
+                Divider()
+                Text("CAMPAIGN SERVICE").font(.system(size:12,weight:.bold,design:.monospaced))
+                    .foregroundStyle(AcesStyle.ice)
+                ForEach(AcesCampaignMission.allCases) { mission in
+                    HStack {
+                        VStack(alignment:.leading,spacing:4) {
+                            Text(String(format:"%02d / %@",mission.rawValue,mission.title))
+                                .font(.system(size:13,weight:.bold,design:.monospaced))
+                            Text(mission.overview).font(.system(size:10))
+                                .foregroundStyle(.white.opacity(0.65))
+                        }
+                        Spacer()
+                        VStack(alignment:.trailing) {
+                            Text(String(repeating:"★",count:AcesPilotLog.stars(for:mission)))
+                                .foregroundStyle(AcesStyle.amber)
+                            Text("BEST \(AcesPilotLog.best(for:mission))")
+                                .font(.system(size:10,design:.monospaced))
+                        }
+                    }
+                    .padding(11)
+                    .background(AcesStyle.panel,in:RoundedRectangle(cornerRadius:9))
+                }
+                Divider()
+                Text("MEDALS & CITATIONS").font(.system(size:12,weight:.bold,design:.monospaced))
+                    .foregroundStyle(AcesStyle.ice)
+                let earned = store.integer(forKey:"aces.campaign.medals")
+                ForEach(AcesPilotLog.medals,id:\.0) { medal in
+                    HStack {
+                        Image(systemName:earned & medal.0 != 0 ? "seal.fill" : "lock.fill")
+                            .foregroundStyle(earned & medal.0 != 0 ? AcesStyle.amber : .gray)
+                        Text(medal.1).font(.system(size:12,weight:.bold,design:.monospaced))
+                        Spacer()
+                        Text(earned & medal.0 != 0 ? "AWARDED" : "LOCKED")
+                            .font(.system(size:10,design:.monospaced))
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
+                }
+                Button("RETURN TO HANGAR") { dismiss() }
+                    .frame(maxWidth:.infinity)
+                    .buttonStyle(.borderedProminent)
+            }.padding(26)
+        }
+        .frame(width:720,height:670)
+        .preferredColorScheme(.dark)
+    }
+    private func recordStatistic(_ name:String,_ number:Int) -> some View {
+        VStack(alignment:.leading,spacing:4) {
+            Text(name).font(.system(size:10,weight:.bold,design:.monospaced))
+                .foregroundStyle(.white.opacity(0.5))
+            Text(String(number)).font(.system(size:18,weight:.black,design:.monospaced))
+                .foregroundStyle(AcesStyle.ice)
+        }.frame(maxWidth:.infinity,alignment:.leading)
+    }
+}
+
 @main struct VectorAcesApp: App {
     @AppStorage("aces.selectedFighter") private var selectedFighter = Fighter.mustang.rawValue
     @State private var started = false
     @State private var showingSettings = false
+    @State private var showingPilotRecord = false
     @AppStorage("aces.hasSave") private var hasSave = false
     @AppStorage("aces.playMode") private var playMode = AcesPlayMode.interception.rawValue
     @AppStorage("aces.campaign.selected") private var selectedMission = 1
@@ -320,6 +401,7 @@ private struct AcesSettings: View {
             .preferredColorScheme(.dark)
             .frame(minWidth:1000,minHeight:670)
             .sheet(isPresented:$showingSettings) { AcesSettings() }
+            .sheet(isPresented:$showingPilotRecord) { AcesPilotRecordSheet() }
         }
         .defaultSize(width:1250,height:820)
     }
@@ -338,6 +420,8 @@ private struct AcesSettings: View {
                                         .tracking(3).foregroundStyle(AcesStyle.amber)
                                 }
                                 Spacer()
+                                Button("PILOT RECORD") { showingPilotRecord = true }
+                                    .buttonStyle(.bordered).tint(AcesStyle.amber)
                                 Button("CUSTOM SETTINGS") { showingSettings = true }
                                     .buttonStyle(.bordered).tint(AcesStyle.ice)
                             }
