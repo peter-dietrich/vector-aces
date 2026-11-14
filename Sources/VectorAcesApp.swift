@@ -207,13 +207,8 @@ private struct AcesSettings: View {
             ZStack {
                 Color(red:0.025,green:0.045,blue:0.077).ignoresSafeArea()
                 if started {
-                    GameSurface(fighter:fighter)
+                    AcesGameWindow(fighter:fighter, onHangar: { started = false })
                         .id(fighter)
-                        .overlay(alignment:.topTrailing) {
-                            Button("HANGAR") { started = false }
-                                .keyboardShortcut(.escape,modifiers:[])
-                                .padding(14)
-                        }
                 } else {
                     ScrollView {
                         VStack(alignment:.leading,spacing:22) {
@@ -347,13 +342,105 @@ private struct AcesSettings: View {
         .defaultSize(width:1250,height:820)
     }
 }
-private struct GameSurface: NSViewRepresentable {
+private struct AcesGameWindow: View {
     let fighter: Fighter
+    let onHangar: () -> Void
+    @AppStorage("aces.difficulty") private var difficulty = 1
+    @AppStorage("aces.soundEnabled") private var soundEnabled = true
+    @State private var showingCustom = false
+    @State private var scene: AirBattleScene
+
+    init(fighter: Fighter, onHangar: @escaping () -> Void) {
+        self.fighter = fighter
+        self.onHangar = onHangar
+        _scene = State(initialValue: AirBattleScene(
+            size: CGSize(width: 1200, height: 720), fighter: fighter))
+    }
+    var body: some View {
+        VStack(spacing:0) {
+            VStack(spacing:9) {
+                HStack(spacing:9) {
+                    VStack(alignment:.leading,spacing:2) {
+                        HStack(alignment:.firstTextBaseline,spacing:9) {
+                            Text("VECTOR ACES")
+                                .font(.system(size:19,weight:.black,design:.monospaced))
+                                .foregroundStyle(.white)
+                            Text("v2026.11.13c")
+                                .font(.system(size:10,weight:.medium,design:.monospaced))
+                                .foregroundStyle(.gray)
+                        }
+                        Text("ARCADE  /  MACOS  /  WWII AIR COMBAT")
+                            .font(.system(size:9,weight:.semibold,design:.monospaced))
+                            .foregroundStyle(.cyan.opacity(0.7))
+                    }
+                    Spacer(minLength:4)
+                    Button("Custom Game") { showingCustom = true }
+                    Button("Save Game") { scene.saveNow() }
+                    Button("Resume") { scene.resumeSavedSortie() }
+                    Toggle("Sound",isOn:$soundEnabled)
+                        .toggleStyle(.checkbox)
+                        .onChange(of:soundEnabled) { newValue in
+                            scene.setSoundEnabled(newValue)
+                        }
+                    Button("Hangar") { onHangar() }
+                    Button("New Game") { scene.restart() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.cyan)
+                }
+                HStack(spacing:12) {
+                    Text("DIFFICULTY")
+                        .font(.system(size:10,weight:.bold,design:.monospaced))
+                        .foregroundStyle(.gray)
+                    HStack(spacing:3) {
+                        ForEach(0..<3,id:\.self) { level in
+                            Button(["Easy","Medium","Hard"][level]) { difficulty = level }
+                                .buttonStyle(.plain)
+                                .font(.system(size:12,weight:.semibold))
+                                .foregroundStyle(difficulty == level ? .black : .white)
+                                .frame(width:67,height:27)
+                                .background(difficulty == level ? Color.cyan : Color(white:0.28))
+                                .clipShape(RoundedRectangle(cornerRadius:6))
+                        }
+                    }
+                    Spacer()
+                    Text(fighter.rawValue.uppercased())
+                        .font(.system(size:10,weight:.semibold,design:.monospaced))
+                        .foregroundStyle(.cyan.opacity(0.73))
+                    Button("Pause / Resume") { scene.togglePause() }
+                        .buttonStyle(.bordered)
+                }
+            }
+            .padding(.horizontal,20)
+            .padding(.vertical,9)
+            .background(Color(white:0.09))
+
+            GameSurface(scene:scene)
+                .frame(maxWidth:.infinity,maxHeight:.infinity)
+                .background(.black)
+
+            HStack(spacing:10) {
+                Text("← → Turn   ↑ Accelerate   ↓ Brake   Q Climb   E Descend   Space Fire   P Pause   Return Restart")
+                Spacer(minLength:4)
+                Text("Terrain: original continuous aerial landscape")
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .font(.system(size:10,weight:.bold,design:.monospaced))
+            .foregroundStyle(.white.opacity(0.9))
+            .padding(.horizontal,12)
+            .padding(.vertical,10)
+            .background(Color(white:0.09))
+        }
+        .sheet(isPresented:$showingCustom) { AcesSettings() }
+    }
+}
+
+private struct GameSurface: NSViewRepresentable {
+    let scene: AirBattleScene
     func makeNSView(context: Context) -> SKView {
         let view = SKView()
         view.ignoresSiblingOrder = true
-        view.presentScene(AirBattleScene(size:CGSize(width:1200,height:720),fighter:fighter))
-        DispatchQueue.main.async { view.window?.makeFirstResponder(view.scene) }
+        view.presentScene(scene)
+        DispatchQueue.main.async { view.window?.makeFirstResponder(scene) }
         return view
     }
     func updateNSView(_ nsView: SKView,context: Context) {}
