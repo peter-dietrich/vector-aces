@@ -3257,7 +3257,7 @@ private final class RightCombatHUDNode: SKNode {
         scoreText.horizontalAlignmentMode = .left
         addChild(scoreText)
         waveText.position=CGPoint(x:16,y:-101)
-        waveText.fontColor=.white
+        waveText.fontColor = .white
         waveText.fontSize=13
         addChild(waveText)
         killsText.position=CGPoint(x:16,y:-125)
@@ -3312,7 +3312,7 @@ private final class RightCombatHUDNode: SKNode {
         addChild(threatRing)
         targetInfo.position=CGPoint(x:14,y:-165)
         targetInfo.fontSize=11
-        targetInfo.fontColor=.white
+        targetInfo.fontColor = .white
         addChild(targetInfo)
         targetDelta.position=CGPoint(x:235,y:-165)
         targetDelta.horizontalAlignmentMode = .right
@@ -3341,7 +3341,7 @@ private final class RightCombatHUDNode: SKNode {
         addChild(missionTitleText)
         objectiveCounter.position=CGPoint(x:235,y:-364)
         objectiveCounter.fontSize=13
-        objectiveCounter.fontColor=.white
+        objectiveCounter.fontColor = .white
         objectiveCounter.horizontalAlignmentMode = .right
         addChild(objectiveCounter)
         for (i,pip) in missionPips.enumerated() {
