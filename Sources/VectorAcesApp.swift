@@ -217,6 +217,16 @@ private struct AcesSettings: View {
                                    onHangar: { started = false })
                         .id(fighter)
                 } else {
+                    hangarCatalog
+                }
+            }
+            .preferredColorScheme(.dark)
+            .frame(minWidth:1000,minHeight:670)
+            .sheet(isPresented:$showingSettings) { AcesSettings() }
+        }
+        .defaultSize(width:1250,height:820)
+    }
+    private var hangarCatalog: some View {
                     ScrollView {
                         VStack(alignment:.leading,spacing:22) {
                             HStack {
@@ -235,6 +245,16 @@ private struct AcesSettings: View {
                                     .buttonStyle(.bordered).tint(AcesStyle.ice)
                             }
                             HStack(alignment:.top,spacing:18) {
+                                hangarAircraftPicker
+                                hangarAircraftDetails
+                            }
+                        }
+                        .padding(25)
+                        .frame(maxWidth:1280)
+                        .frame(maxWidth:.infinity)
+                    }
+    }
+    private var hangarAircraftPicker: some View {
                                 VStack(alignment:.leading,spacing:13) {
                                     Text("MISSION TYPE")
                                         .font(.system(size:11,weight:.bold,design:.monospaced))
@@ -301,6 +321,8 @@ private struct AcesSettings: View {
                                 .padding(18)
                                 .frame(width:330).frame(minHeight:570)
                                 .background(AcesStyle.panel,in:RoundedRectangle(cornerRadius:14))
+    }
+    private var hangarAircraftDetails: some View {
                                 VStack(alignment:.leading,spacing:12) {
                                     HStack {
                                         VStack(alignment:.leading,spacing:4) {
@@ -348,20 +370,8 @@ private struct AcesSettings: View {
                                 .padding(20)
                                 .frame(maxWidth:.infinity,alignment:.leading)
                                 .background(AcesStyle.panel,in:RoundedRectangle(cornerRadius:14))
-                            }
-                        }
-                        .padding(25)
-                        .frame(maxWidth:1280)
-                        .frame(maxWidth:.infinity)
-                    }
-                }
-            }
-            .preferredColorScheme(.dark)
-            .frame(minWidth:1000,minHeight:670)
-            .sheet(isPresented:$showingSettings) { AcesSettings() }
-        }
-        .defaultSize(width:1250,height:820)
     }
+
 }
 private struct AcesGameWindow: View {
     let fighter: Fighter
