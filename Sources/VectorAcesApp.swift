@@ -1144,6 +1144,238 @@ private final class AirBattleScene: SKScene {
         updateLabels()
     }
 
+    // MARK: Mission 01 - Stop the Stukas
+    // Mission objectives are deliberately separate from endless-wave scoring.
+    // Position is camera-relative just like the rest of the battlefield.
+    private func configureAirfield() {
+        airfield.removeFromParent()
+        airfield.removeAllChildren()
+        airfield.name = "airfield"
+        airfield.position = CGPoint(x:size.width * 0.76,y:size.height * 0.39)
+        airfield.zPosition = -3
+        let outer = SKShapeNode(rectOf:CGSize(width:238,height:151),cornerRadius:9)
+        outer.fillColor = SKColor(red:0.26,green:0.35,blue:0.23,alpha:0.8)
+        outer.strokeColor = SKColor(red:0.8,green:0.8,blue:0.55,alpha:0.4)
+        airfield.addChild(outer)
+        let strip = SKShapeNode(rectOf:CGSize(width:183,height:34),cornerRadius:3)
+        strip.fillColor = SKColor(red:0.37,green:0.37,blue:0.34,alpha:1)
+        strip.strokeColor = SKColor(white:0.86,alpha:0.67)
+        strip.zRotation = 0.12
+        airfield.addChild(strip)
+        for i in -5...5 {
+            let mark = SKShapeNode(rectOf:CGSize(width:10,height:2))
+            mark.fillColor = .white
+            mark.strokeColor = .clear
+            mark.position = CGPoint(x:CGFloat(i)*15,y:CGFloat(i)*1.8)
+            airfield.addChild(mark)
+        }
+        for i in 0..<4 {
+            let hangar = SKShapeNode(rectOf:CGSize(width:31,height:22),cornerRadius:3)
+            hangar.fillColor = SKColor(red:0.51,green:0.49,blue:0.37,alpha:1)
+            hangar.strokeColor = .black.withAlphaComponent(0.4)
+            hangar.position = CGPoint(x:CGFloat(i-2)*49+24,y:-53)
+            airfield.addChild(hangar)
+        }
+        let marker = SKLabelNode(fontNamed:"Menlo-Bold")
+        marker.text = "ALLIED AIRFIELD"
+        marker.fontSize = 10
+        marker.fontColor = SKColor(red:0.95,green:0.90,blue:0.47,alpha:1)
+        marker.position = CGPoint(x:0,y:83)
+        airfield.addChild(marker)
+        environment.addChild(airfield)
+    }
+
+    private func configureMissionOverlay() {
+        missionBackdrop.zPosition = 175
+        missionBackdrop.fillColor = SKColor(calibratedRed:0.018,green:0.038,blue:0.065,alpha:0.91)
+        missionBackdrop.strokeColor = .cyan.withAlphaComponent(0.46)
+        missionBackdrop.lineWidth = 1.3
+        addChild(missionBackdrop)
+        for (index,label) in missionCopy.enumerated() {
+            label.fontSize = index == 0 ? 21 : index == 5 ? 15 : 13
+            label.fontName = index == 0 || index == 5 ? "Menlo-Bold" : "Menlo"
+            label.fontColor = index == 0 ? .cyan :
+                index == 5 ? .orange : .white
+            label.horizontalAlignmentMode = .center
+            label.verticalAlignmentMode = .center
+            label.zPosition = 177
+            addChild(label)
+        }
+        missionText.fontSize = 12
+        missionText.fontColor = .orange
+        missionText.horizontalAlignmentMode = .left
+        missionText.zPosition = 102
+        addChild(missionText)
+        layoutMissionOverlay()
+    }
+
+    private func layoutMissionOverlay() {
+        guard playMode == .interception else { return }
+        let boxWidth = min(size.width - 90,720)
+        let boxHeight: CGFloat = 300
+        let rect = CGRect(x:(size.width-boxWidth)/2,
+                          y:(size.height-boxHeight)/2,
+                          width:boxWidth,height:boxHeight)
+        missionBackdrop.path = CGPath(roundedRect:rect,cornerWidth:13,cornerHeight:13,transform:nil)
+        for (i,label) in missionCopy.enumerated() {
+            label.position = CGPoint(x:rect.midX,y:rect.maxY - CGFloat(i)*46 - 41)
+        }
+        missionText.position = CGPoint(x:22,y:size.height-22)
+    }
+
+    private func showMissionBriefing() {
+        missionStage = .briefing
+        missionBackdrop.isHidden = false
+        let lines = [
+            "MISSION 01  //  STOP THE STUKAS",
+            "SIX JU 87 DIVE BOMBERS APPROACH THE ALLIED AIRFIELD",
+            "FW 190 ESCORTS WILL TRY TO DRAW YOU AWAY",
+            "DESTROY AT LEAST FOUR BOMBERS BEFORE THEY STRIKE",
+            "THREE AIRFIELD DEFENSE POINTS  •  150 SECOND LIMIT",
+            "PRESS RETURN TO LAUNCH"
+        ]
+        for (label,line) in zip(missionCopy,lines) {
+            label.text = line; label.isHidden = false
+        }
+        missionText.text = ""
+        status.text = ""
+    }
+
+    private func beginMission() {
+        guard playMode == .interception && missionStage == .briefing else { return }
+        missionStage = .active
+        missionBackdrop.isHidden = true
+        missionCopy.forEach { $0.isHidden = true }
+        missionTime = 0
+        gameTime = 0
+        bomberLaunched = 0
+        bomberDestroyed = 0
+        bomberEscaped = 0
+        airfieldHealth = 3
+        missionEscortKills = 0
+        missionHitsTaken = 0
+        keys.removeAll()
+        status.text = ""
+        view?.window?.makeFirstResponder(self)
+    }
+
+    private func spawnMissionBomberPair() {
+        let launchIndex = bomberLaunched / 2
+        let base = CGPoint(x:airfield.position.x + 1650,
+                           y:airfield.position.y + CGFloat(launchIndex-1)*140)
+        for i in 0..<2 {
+            let point = CGPoint(x:base.x+CGFloat(i)*80,y:base.y+CGFloat(i)*135)
+            let sprite = SKNode()
+            sprite.position = point
+            sprite.zPosition = 15
+            sprite.addChild(drawAircraft(kind:2,color:SKColor(
+                red:0.43,green:0.45,blue:0.33,alpha:1)))
+            sprite.setScale(1.04)
+            addChild(sprite)
+            let toward = atan2(airfield.position.y-point.y,airfield.position.x-point.x)
+            sprite.zRotation = toward - .pi/2
+            bandits.append(Bandit(sprite:sprite,position:point,heading:toward,
+                                  speed:118,health:3,kind:2,
+                                  formationTime:0,fireCooldown:100,
+                                  targetOffset:0,tactic:.formation,tacticTime:0,
+                                  maneuverSign:1,entryHeading:toward,
+                                  previousDistance:0,missionBomber:true))
+            bomberLaunched += 1
+        }
+        // Escorts enter close to the inbound bombers but maneuver
+        // independently and pursue the player, not the airfield.
+        for i in 0..<(launchIndex == 0 ? 2 : 1) {
+            let point = CGPoint(x:base.x-180+CGFloat(i)*85,y:base.y+220)
+            let sprite = SKNode()
+            sprite.position = point
+            sprite.zPosition = 15
+            sprite.addChild(drawAircraft(kind:0,color:SKColor(
+                red:0.45,green:0.47,blue:0.43,alpha:1)))
+            sprite.setScale(0.86)
+            addChild(sprite)
+            let toward = atan2(player.position.y-point.y,player.position.x-point.x)
+            sprite.zRotation = toward - .pi/2
+            bandits.append(Bandit(sprite:sprite,position:point,heading:toward,
+                                  speed:240,health:2,kind:0,
+                                  formationTime:2,fireCooldown:2.2,
+                                  targetOffset:CGFloat.random(in:-0.65...0.65),
+                                  tactic:.formation,tacticTime:0,
+                                  maneuverSign:i == 0 ? -1 : 1,
+                                  entryHeading:toward,previousDistance:800))
+        }
+        flash("MISSION ALERT  //  INBOUND STUKAS  \(bomberLaunched)/6")
+    }
+
+    private func updateMissionSpawns() {
+        guard missionStage == .active else { return }
+        let schedule: [CGFloat] = [2,30,58]
+        let next = bomberLaunched / 2
+        if next < schedule.count && missionTime >= schedule[next] {
+            spawnMissionBomberPair()
+        }
+        missionText.text = String(format:"AIRFIELD %d/3  //  STUKAS DOWN %d/6  //  ESCAPED %d  //  TIME %03d",
+                                  airfieldHealth,bomberDestroyed,bomberEscaped,
+                                  Int(max(0,missionLimit-missionTime)))
+    }
+
+    private func advanceMissionBomber(_ b: inout Bandit,
+                                      dt: CGFloat, scrolling: CGVector) {
+        let dx = airfield.position.x - b.position.x
+        let dy = airfield.position.y - b.position.y
+        let toward = atan2(dy,dx)
+        let difference = atan2(sin(toward-b.heading),cos(toward-b.heading))
+        b.heading += max(-0.48*dt,min(0.48*dt,difference))
+        b.position.x += cos(b.heading)*b.speed*dt + scrolling.dx
+        b.position.y += sin(b.heading)*b.speed*dt + scrolling.dy
+        b.sprite.position = b.position
+        b.sprite.zRotation = b.heading - .pi/2
+    }
+
+    private func evaluateMission() {
+        guard missionStage == .active else { return }
+        if airfieldHealth <= 0 {
+            finishMission(success:false,reason:"AIRFIELD DESTROYED")
+        } else if missionTime >= missionLimit {
+            finishMission(success:false,reason:"INTERCEPTION WINDOW EXPIRED")
+        } else if bomberLaunched == 6 && bomberDestroyed+bomberEscaped >= 6 {
+            finishMission(success:bomberDestroyed >= 4,
+                          reason:bomberDestroyed >= 4 ?
+                            "AIRFIELD SECURED" : "TOO MANY BOMBERS GOT THROUGH")
+        }
+    }
+
+    private func finishMission(success: Bool, reason: String) {
+        guard playMode == .interception && missionStage == .active else { return }
+        missionStage = success ? .success : .failure
+        gameOver = true
+        pausedGame = false
+        keys.removeAll()
+        sounds.stopEngine()
+        if success { score += airfieldHealth*400 + Int(max(0,missionLimit-missionTime))*12 }
+        let rating = success ? (airfieldHealth == 3 ? "THREE STARS" :
+                              airfieldHealth == 2 ? "TWO STARS" : "ONE STAR") : "MISSION FAILED"
+        let accuracy = bomberDestroyed
+        let lines = [
+            success ? "MISSION COMPLETE  //  VICTORY" : "MISSION FAILED  //  RETREAT",
+            reason,
+            "STUKAS DESTROYED  \(bomberDestroyed)/6   /   ESCAPED  \(bomberEscaped)",
+            "AIRFIELD INTEGRITY  \(airfieldHealth)/3   /   ESCORTS DOWN  \(missionEscortKills)",
+            "DAMAGE TAKEN  \(missionHitsTaken)   /   SCORE  \(score)",
+            "\(rating)  •  RETURN TO RETRY"
+        ]
+        missionBackdrop.isHidden = false
+        for (label,line) in zip(missionCopy,lines) {
+            label.text = line
+            label.isHidden = false
+        }
+        missionText.text = ""
+        status.text = ""
+        if success {
+            let best = prefs.integer(forKey:"aces.mission01Best")
+            if score > best { prefs.set(score,forKey:"aces.mission01Best") }
+        }
+    }
+
     private func spawnFormation() {
         let count = min(3 + wave / 2, 6)
         let edge = Int.random(in: 0..<4)
