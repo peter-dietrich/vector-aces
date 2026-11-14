@@ -1488,7 +1488,10 @@ private final class AirBattleScene: SKScene {
             let playerBehind = cos(b.heading) * dx + sin(b.heading) * dy < -65
             let playerAimingAtBandit = cos(heading) * (b.position.x-player.position.x) +
                 sin(heading) * (b.position.y-player.position.y) > 0
-            let playerAspect = abs(atan2(sin(bearing-heading),cos(bearing-heading)))
+            let playerToEnemy = atan2(b.position.y-player.position.y,
+                                      b.position.x-player.position.x)
+            let playerAspect = abs(atan2(sin(playerToEnemy-heading),
+                                        cos(playerToEnemy-heading)))
             let underPursuit = playerBehind && playerAimingAtBandit &&
                                playerAspect < 0.7 && distance < 390
 
