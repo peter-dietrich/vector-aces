@@ -3199,10 +3199,12 @@ private final class RightCombatHUDNode: SKNode {
     private let scoreText=SKLabelNode(fontNamed:"Menlo-Bold")
     private let waveText=SKLabelNode(fontNamed:"Menlo-Bold")
     private let killsText=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let contactsText=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let scoreCaption=SKLabelNode(fontNamed:"Menlo-Bold")
     private let targetInfo=SKLabelNode(fontNamed:"Menlo-Bold")
     private let targetDelta=SKLabelNode(fontNamed:"Menlo-Bold")
     private let targetArrow=SKNode()
-    private let threatRing=SKShapeNode(circleOfRadius:50)
+    private let threatRing=SKShapeNode(circleOfRadius:46)
     private let ammoText=SKLabelNode(fontNamed:"Menlo-Bold")
     private let fireFlash=[SKShapeNode(circleOfRadius:5),SKShapeNode(circleOfRadius:5)]
     private let weaponPips:(SKShapeNode,SKShapeNode,SKShapeNode,SKShapeNode,SKShapeNode,
@@ -3245,27 +3247,40 @@ private final class RightCombatHUDNode: SKNode {
         addChild(AcesHUDVisual.panel(CGRect(x:0,y:-676,width:248,height:222)))
         AcesHUDVisual.text("COMBAT / TARGET",at:CGPoint(x:14,y:-19),
                            color:AcesHUDVisual.amber,parent:self)
+        addChild(AcesHUDVisual.line(CGPoint(x:14,y:-32),CGPoint(x:234,y:-32),
+                                   color:AcesHUDVisual.ice.withAlphaComponent(0.22)))
+        addChild(AcesHUDVisual.line(CGPoint(x:14,y:-148),CGPoint(x:234,y:-148),
+                                   color:AcesHUDVisual.ice.withAlphaComponent(0.18)))
         AcesHUDVisual.text("GUNS / AMMUNITION",at:CGPoint(x:14,y:-221),
                            color:AcesHUDVisual.amber,parent:self)
         AcesHUDVisual.text("MISSION / OBJECTIVE",at:CGPoint(x:14,y:-340),
                            color:AcesHUDVisual.amber,parent:self)
         AcesHUDVisual.text("RADAR / 2400",at:CGPoint(x:14,y:-475),
                            color:AcesHUDVisual.amber,parent:self)
-        scoreText.position=CGPoint(x:16,y:-61)
-        scoreText.fontSize=27
+        scoreCaption.text="SCORE"
+        scoreCaption.position=CGPoint(x:15,y:-46)
+        scoreCaption.fontSize=9
+        scoreCaption.fontColor=AcesHUDVisual.muted
+        addChild(scoreCaption)
+        scoreText.position=CGPoint(x:15,y:-72)
+        scoreText.fontSize=26
         scoreText.fontColor=AcesHUDVisual.ice
         scoreText.horizontalAlignmentMode = .left
         addChild(scoreText)
-        waveText.position=CGPoint(x:16,y:-101)
+        waveText.position=CGPoint(x:15,y:-99)
         waveText.fontColor = .white
-        waveText.fontSize=13
+        waveText.fontSize=12
         addChild(waveText)
-        killsText.position=CGPoint(x:16,y:-125)
+        killsText.position=CGPoint(x:15,y:-119)
         killsText.fontColor=AcesHUDVisual.muted
-        killsText.fontSize=11
+        killsText.fontSize=10
         addChild(killsText)
+        contactsText.position=CGPoint(x:15,y:-137)
+        contactsText.fontColor=AcesHUDVisual.muted
+        contactsText.fontSize=10
+        addChild(contactsText)
 
-        let compass=SKShapeNode(circleOfRadius:46)
+        let compass=SKShapeNode(circleOfRadius:43)
         compass.position=CGPoint(x:191,y:-104)
         compass.fillColor=SKColor.black.withAlphaComponent(0.34)
         compass.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.35)
@@ -3274,8 +3289,8 @@ private final class RightCombatHUDNode: SKNode {
         for index in 0..<12 {
             let angle=CGFloat(index) * .pi / 6
             addChild(AcesHUDVisual.line(
-                CGPoint(x:191+sin(angle)*40,y:-104+cos(angle)*40),
-                CGPoint(x:191+sin(angle)*45,y:-104+cos(angle)*45),
+                CGPoint(x:191+sin(angle)*37,y:-104+cos(angle)*37),
+                CGPoint(x:191+sin(angle)*42,y:-104+cos(angle)*42),
                 color:AcesHUDVisual.muted.withAlphaComponent(0.6)))
         }
         let nose=SKShapeNode(path:{
@@ -3310,11 +3325,11 @@ private final class RightCombatHUDNode: SKNode {
         threatRing.lineWidth=2.5
         threatRing.isHidden=true
         addChild(threatRing)
-        targetInfo.position=CGPoint(x:14,y:-165)
-        targetInfo.fontSize=11
+        targetInfo.position=CGPoint(x:14,y:-172)
+        targetInfo.fontSize=10
         targetInfo.fontColor = .white
         addChild(targetInfo)
-        targetDelta.position=CGPoint(x:235,y:-165)
+        targetDelta.position=CGPoint(x:235,y:-172)
         targetDelta.horizontalAlignmentMode = .right
         targetDelta.fontSize=10
         targetDelta.fontColor=AcesHUDVisual.ice
@@ -3412,14 +3427,15 @@ private final class RightCombatHUDNode: SKNode {
     func render(_ v:AcesCombatHUDValue, time:CGFloat) {
         scoreText.text=String(format:"%06d",v.score)
         waveText.text=String(format:"WAVE %02d",v.wave)
-        killsText.text=String(format:"%02d KILLS   /   %02d CONTACTS",v.kills,v.contacts.filter{!$0.ally && !$0.objective}.count)
+        killsText.text=String(format:"%02d  KILLS",v.kills)
+        contactsText.text=String(format:"%02d  CONTACTS",v.contacts.filter{!$0.ally && !$0.objective}.count)
         targetArrow.isHidden=v.targetBearing == nil
         if let bearing=v.targetBearing { targetArrow.zRotation=bearing }
         threatRing.isHidden = !v.rearThreat
         if v.rearThreat {
             threatRing.alpha=0.35+0.65*(0.5+0.5*sin(time*9))
         }
-        targetInfo.text=v.targetRange.map { "TGT \(Int($0))" } ?? "NO CONTACT"
+        targetInfo.text=v.targetRange.map { "TARGET  \(Int($0))" } ?? "NO TARGET"
         if let delta=v.targetAltitudeDelta {
             let alt=String(format:"%+.0f",delta)
             targetDelta.text="Δ \(alt) FT"
