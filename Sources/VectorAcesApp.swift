@@ -504,7 +504,10 @@ private final class AirBattleScene: SKScene {
     private var comboDeadline: CGFloat = 0
     private let threat = SKLabelNode(fontNamed: "Menlo-Bold")
     private let telemetryPanel = SKShapeNode()
-    private let telemetryLines = (0..<7).map { _ in SKLabelNode(fontNamed: "Menlo-Bold") }
+    private let telemetryLines = (0..<19).map { _ in SKLabelNode(fontNamed: "Menlo-Bold") }
+    private let telemetryAccent = SKShapeNode()
+    private let telemetryRules = (0..<3).map { _ in SKShapeNode() }
+    private let radarRange: CGFloat = 2400 // World-space arcade units; about 4.5x the old range.
     private let radarPanel = SKShapeNode()
     private let radarContacts = SKNode()
     private var gunCycle = 0
@@ -1521,63 +1524,102 @@ private final class AirBattleScene: SKScene {
     }
 
     private func installTelemetry() {
-        hud.isHidden = true // Title and instructions live in SwiftUI header/footer.
-        telemetryPanel.fillColor = SKColor(calibratedRed:0.035,green:0.085,blue:0.13,
-                                            alpha:CGFloat(prefs.object(forKey:"aces.telemetryOpacity") as? Double ?? 0.22))
-        telemetryPanel.strokeColor = SKColor(white:0.81,alpha:0.17)
+        hud.isHidden = true // SwiftUI header and footer own their navigation text.
+        let ice = SKColor(calibratedRed: 0.12, green: 0.91, blue: 0.99, alpha: 1)
+        let amber = SKColor(calibratedRed: 1, green: 0.72, blue: 0.40, alpha: 0.94)
+        let muted = SKColor(calibratedWhite: 0.82, alpha: 0.9)
+        telemetryPanel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13,
+            alpha: CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.23))
+        telemetryPanel.strokeColor = SKColor(calibratedWhite: 0.81, alpha: 0.17)
         telemetryPanel.lineWidth = 0.55
         telemetryPanel.zPosition = 90
         addChild(telemetryPanel)
+
+        telemetryAccent.fillColor = amber.withAlphaComponent(0.72)
+        telemetryAccent.strokeColor = .clear
+        telemetryAccent.zPosition = 91
+        addChild(telemetryAccent)
+        for rule in telemetryRules {
+            rule.fillColor = SKColor(calibratedWhite: 0.81, alpha: 0.20)
+            rule.strokeColor = .clear
+            rule.zPosition = 91
+            addChild(rule)
+        }
         for (i, label) in telemetryLines.enumerated() {
-            label.fontSize = i == 2 ? 29 : i == 0 ? 9 : i == 6 ? 10 : 10
-            label.fontColor = i == 0
-                ? SKColor(calibratedRed:1,green:0.72,blue:0.40,alpha:0.95)
-                : i == 2 ? .cyan : SKColor(calibratedWhite:0.85,alpha:0.94)
+            label.fontSize = i == 2 ? 30 : i == 5 ? 25 :
+                (i == 8 || i == 9 || i == 12 ? 13 : 10)
+            if [0, 7, 11, 15].contains(i) {
+                label.fontSize = 9
+                label.fontColor = amber
+            } else if [2, 5, 8, 9].contains(i) {
+                label.fontColor = ice
+            } else {
+                label.fontColor = muted
+            }
             label.horizontalAlignmentMode = .right
             label.verticalAlignmentMode = .center
-            label.zPosition = 92
+            label.zPosition = 93
             addChild(label)
         }
-        radarPanel.fillColor = .black.withAlphaComponent(CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.35))
-        radarPanel.strokeColor = .cyan.withAlphaComponent(0.4)
-        radarPanel.lineWidth = 1
+        radarPanel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13,
+            alpha: CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.23))
+        radarPanel.strokeColor = .cyan.withAlphaComponent(0.3)
+        radarPanel.lineWidth = 0.7
         radarPanel.zPosition = 91
         addChild(radarPanel)
         radarContacts.zPosition = 93
         addChild(radarContacts)
-        attitudePanel.fillColor = .black.withAlphaComponent(0.38)
-        attitudePanel.strokeColor = .cyan.withAlphaComponent(0.35)
-        attitudePanel.zPosition = 90
+
+        attitudePanel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13,
+            alpha: CGFloat(prefs.object(forKey: "aces.telemetryOpacity") as? Double ?? 0.23))
+        attitudePanel.strokeColor = .cyan.withAlphaComponent(0.28)
+        attitudePanel.lineWidth = 0.7
+        attitudePanel.zPosition = 91
         addChild(attitudePanel)
         attitude.zPosition = 94
         addChild(attitude)
         layoutTelemetry()
     }
+
     private func layoutTelemetry() {
-        let right = size.width - 18
-        let panelWidth: CGFloat = min(220, max(190, size.width * 0.20))
-        let panelHeight: CGFloat = 205
-        let top = size.height - 15
+        let right = size.width - 15
+        let panelWidth: CGFloat = min(232, max(190, size.width * 0.195))
+        let panelHeight: CGFloat = min(380, max(300, size.height * 0.52))
+        let top = size.height - 14
         let panel = CGRect(x: right - panelWidth, y: top - panelHeight,
                            width: panelWidth, height: panelHeight)
-        telemetryPanel.path = CGPath(roundedRect: panel, cornerWidth: 10, cornerHeight: 10, transform: nil)
+        telemetryPanel.path = CGPath(roundedRect: panel, cornerWidth: 8, cornerHeight: 8, transform: nil)
+        telemetryAccent.path = CGPath(rect: CGRect(x:panel.minX+6,y:panel.minY+10,
+                                                  width:2,height:panelHeight-20),transform:nil)
+
+        // Explicit vertical hierarchy: score, wave, aircraft, tactical, systems.
+        let baseOffsets: [CGFloat] = [15,33,60,91,111,139,165,188,210,
+                                      232,251,276,296,316,331,348,364,379,394]
+        let scale = panelHeight / 410
+        let rightX = panel.maxX - 12
         for (i, label) in telemetryLines.enumerated() {
-            let offsets: [CGFloat] = [15, 39, 58, 100, 129, 155, 184]
-            label.position = CGPoint(x: panel.maxX - 13, y: panel.maxY - offsets[i])
+            label.position = CGPoint(x:rightX, y:panel.maxY - baseOffsets[i] * scale)
+            label.setScale(min(1, max(0.75, scale)))
         }
-        let attitudeTop = panel.minY - 10
-        let attitudeHeight: CGFloat = 130
-        let attitudeRect = CGRect(x: right - panelWidth, y: attitudeTop - attitudeHeight,
-                                  width: panelWidth, height: attitudeHeight)
-        attitudePanel.path = CGPath(roundedRect: attitudeRect, cornerWidth: 10, cornerHeight: 10, transform: nil)
-        attitude.position = CGPoint(x: attitudeRect.midX, y: attitudeRect.midY)
-        let radarBottom: CGFloat = 14
-        let radarHeight = max(106, attitudeRect.minY - 9 - radarBottom)
-        let radarFrame = CGRect(x: right - panelWidth, y: radarBottom,
-                                width: panelWidth, height: radarHeight)
-        radarRadius = min(85, (radarHeight - 16) / 2)
-        radarPanel.path = CGPath(roundedRect: radarFrame, cornerWidth: 10, cornerHeight: 10, transform: nil)
-        radarContacts.position = CGPoint(x: radarFrame.midX, y: radarFrame.midY - 5)
+        for (i, offset) in [100.0, 177.0, 267.0].enumerated() {
+            telemetryRules[i].path = CGPath(rect: CGRect(
+                x: panel.minX + 16, y: panel.maxY - CGFloat(offset) * scale,
+                width: panelWidth - 29, height: 0.7), transform: nil)
+        }
+        let attitudeHeight: CGFloat = min(124, max(106, size.height * 0.16))
+        let attitudeRect = CGRect(x: panel.minX, y: panel.minY - 8 - attitudeHeight,
+                                  width:panelWidth,height:attitudeHeight)
+        attitudePanel.path = CGPath(roundedRect: attitudeRect, cornerWidth: 8, cornerHeight: 8,
+                                    transform:nil)
+        attitude.position = CGPoint(x:attitudeRect.midX,y:attitudeRect.midY)
+        attitude.setScale(min(1, attitudeHeight / 134))
+
+        let radarBottom: CGFloat = 12
+        let radarFrame = CGRect(x:panel.minX,y:radarBottom,width:panelWidth,
+                                height:max(100,attitudeRect.minY - radarBottom - 8))
+        radarPanel.path = CGPath(roundedRect:radarFrame,cornerWidth:8,cornerHeight:8,transform:nil)
+        radarRadius = min(84,(radarFrame.height - 24) / 2)
+        radarContacts.position = CGPoint(x:radarFrame.midX,y:radarFrame.midY)
     }
     private func updateRadar() {
         if gameTime - lastRadarRender < 0.045 { return }
@@ -1638,21 +1680,70 @@ private final class AirBattleScene: SKScene {
     }
 
     private func updateLabels() {
-        hud.position = CGPoint(x: 23, y: size.height - 24)
-        status.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
-        threat.position = CGPoint(x: size.width - 24, y: size.height - 277)
-        hud.text = "VECTOR ACES  /  WWII AIR COMBAT"
+        status.position = CGPoint(x:size.width/2,y:size.height*0.64)
+        // Important rear threats must remain readable outside the panel.
+        threat.position = CGPoint(x:size.width - 20,y:size.height - 423)
+        hud.text = "VECTOR ACES / WWII AIR COMBAT"
+        if score > prefs.integer(forKey:"aces.bestScore") {
+            prefs.set(score,forKey:"aces.bestScore")
+        }
         let degrees = Int((90 - heading * 180 / .pi).truncatingRemainder(dividingBy: 360) + 360) % 360
+        let contacts = bandits.filter {
+            hypot($0.position.x-player.position.x,$0.position.y-player.position.y) <= radarRange
+        }
+        let nearest = bandits.min { lhs,rhs in
+            hypot(lhs.position.x-player.position.x,lhs.position.y-player.position.y) <
+            hypot(rhs.position.x-player.position.x,rhs.position.y-player.position.y)
+        }
+        var bearingText = "NO CONTACT"
+        var rangeText = "RANGE  ---"
+        if let target = nearest {
+            let dx = target.position.x-player.position.x
+            let dy = target.position.y-player.position.y
+            let distance = hypot(dx,dy)
+            let relative = atan2(sin(atan2(dy,dx)-heading),cos(atan2(dy,dx)-heading))
+            // Positive relative angle is left of the aircraft. Clock numbers
+            // advance to the RIGHT, so the sign is deliberately inverted.
+            let hour = Int((12 - (relative * 6 / .pi)).rounded())
+            let clock = ((hour % 12) + 12) % 12
+            bearingText = String(format:"NEAREST  %02d O'CLOCK",clock == 0 ? 12 : clock)
+            rangeText = String(format:"RANGE  %04d GAME YD",Int(distance.rounded()))
+        }
+        let airframe = max(0,health)
+        let ammoText = prefs.bool(forKey:"aces.unlimitedAmmo") ? "UNLIMITED" : String(ammo)
+        let altitudeBand = altitude < 3500 ? "LOW" : altitude < 15000 ? "COMBAT" : "HIGH"
+        let rate = Int(climbRate * 60 / 100)
+        let engine = airframe <= 1 ? "CRITICAL" : airframe <= fighter.health / 2 ? "DAMAGED" : "NORMAL"
+        let difficulty = ["ROOKIE","VETERAN","ACE"][min(2,max(0,prefs.integer(forKey:"aces.difficulty")))]
         let rows = [
             "VECTOR ACES  //  TELEMETRY",
             "CURRENT SCORE",
             String(format:"%06d",score),
-            String(format:"WAVE %02d  /  %02d KILLS",wave,kills),
-            "AIRFRAME \(max(0, health))/\(fighter.health)   AMMO \(prefs.bool(forKey:"aces.unlimitedAmmo") ? "∞" : String(ammo))",
-            "ALT \(Int(altitude)) FT   \(Int(airspeed)) MPH",
-            String(format:"HEADING %03d DEG",degrees)
+            String(format:"BEST  %06d",prefs.integer(forKey:"aces.bestScore")),
+            "CURRENT WAVE",
+            String(format:"%02d",wave),
+            String(format:"%02d KILLS   /   %02d CONTACTS",kills,contacts.count),
+            "AIRCRAFT STATUS",
+            "AIRFRAME  \(airframe)/\(fighter.health)",
+            "AMMO  \(ammoText)",
+            "\(Int(airspeed)) MPH  /  \(Int(altitude)) FT",
+            "TACTICAL AWARENESS",
+            bearingText,
+            rangeText,
+            "CONTACTS IN RANGE  \(contacts.count)",
+            "FLIGHT SYSTEMS",
+            "\(fighter.rawValue.uppercased())",
+            "HDG \(degrees)°  V/S \(rate >= 0 ? "+" : "")\(rate*100) FPM",
+            "\(altitudeBand) ALT  /  ENGINE \(engine)",
         ]
-        for (index, label) in telemetryLines.enumerated() { label.text = rows[index] }
+        for (i,label) in telemetryLines.enumerated() {
+            label.text = rows[i]
+            if i == 8 {
+                label.fontColor = airframe <= 1 ? .red : .cyan
+            }
+        }
+        // The external threat banner is governed by the combat AI and stays
+        // visible during the closest rear attack.
         updateRadar()
     }
     func restart() {
