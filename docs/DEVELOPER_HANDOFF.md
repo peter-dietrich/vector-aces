@@ -98,3 +98,16 @@
 - A discreet tactical prompt indicates cloud cover, climbing energy drain, dive-attack opportunity and low-altitude warning; existing Vector Drift-styled telemetry now reports ENERGY and COVER.
 - Endless run save/restore preserves flight energy alongside altitude, speed and heading. Mission 01 and Endless controls and selection remain unchanged.
 - **Runtime QA required:** assess Q/E responsiveness, climb versus dive tradeoff, altitude-mismatch combat fairness, radar/lead cues, cloud concealment, terrain warning, bombers/escorts at mission altitudes and Mac audio performance. CI compilation checks do not validate gameplay feel.
+
+## Phase 4 — Campaign & progression (November 13, 2026)
+- Four selectable campaign missions in the hangar; missions 2–4 unlock sequentially after successful preceding missions. Endless Dogfight remains separate.
+  1. **Stop the Stukas:** existing six Ju 87 airfield-defense mission, four kills required.
+  2. **Bomber Escort:** three allied B-17 stand-ins visually use distinct light-colored multi-engine silhouette; four waves of German interceptors target allied formation; keep two of three allies alive until 95-second extraction.
+  3. **Hunt the Ace:** red elite Fw 190 with high durability and two wingmen, defeat before 125 seconds.
+  4. **Defend the Bridge:** river/bridge objective rendered distinctly, eight Stukas over four waves; destroy five and preserve bridge before 155-second limit.
+- New **Pilot Record** panel shows lifetime sorties, victories, kills, score, rank, per-mission star awards, personal best scores and earned/locked medals. Pilot progress uses local UserDefaults and is not network/cloud-synced.
+- Ranks: Flight Officer -> Lieutenant -> Captain -> Major -> Squadron Leader; medals include First Victory, Guardian, Ace Hunter, Campaign Veteran, Perfect Sortie.
+- Mission debrief records success/failure, score, damage, progress, and new award. Mission selection stores the last mission; locked missions are disabled.
+- Mission scores are deliberately arcade/approximate; not historically sourced aircraft performance metrics.
+- **Mac gameplay QA required:** test missions one by one, verify unlocks, stars, medal awards, ace kill, allied bomber survival under escort attacks, bridge damage and win/loss. Validate that switching to Endless preserves the older experience and save/resume.
+- GitHub Actions macOS Xcode CI compiles code, but cannot validate gameplay balance, mission pacing, precise AI tactics or visuals.
