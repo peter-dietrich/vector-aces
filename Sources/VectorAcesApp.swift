@@ -889,6 +889,7 @@ private final class AirBattleScene: SKScene {
             configureMissionOverlay()
             showMissionBriefing()
         }
+        regenerateCloudField()
         if playMode == .endless && prefs.bool(forKey: "aces.resumeRequested") { loadRun() }
         prefs.set(false, forKey: "aces.resumeRequested")
         updateLabels()
@@ -1137,50 +1138,100 @@ private final class AirBattleScene: SKScene {
     }
 
     private func buildGround() {
-        // Satellite-style terrain is rendered locally and needs no network connection.
-        // A real geo-referenced texture can later replace this tile source with
-        // properly credited public-domain NASA/USGS imagery.
-        // Stream individually unique tiles from absolute world coordinates.
-        // Each neighboring tile samples the same continuous landscape function.
-        updateTerrainTiles(initial: true)
+        // Terrain is deterministic, but each sortie generates unique clouds.
+        updateTerrainTiles(initial:true)
+    }
 
-        // Organize cloud populations into fronts, broken banks and isolated puffs;
-        // shadow layers give them height without obscuring dogfight visibility.
-        let shapes = (0..<4).map { cloudTexture(seed: $0) }
+    private func cloudSafetyZones() -> [CGRect] {
+        let p = player.position == .zero ?
+            CGPoint(x:size.width*0.5,y:size.height*0.5) : player.position
+        var zones = [CGRect(x:p.x-380,y:p.y-370,width:760,height:740)]
+        guard playMode == .interception else { return zones }
+        switch campaignMission {
+        case .stukas, .bridge:
+            // Objective AND initial bomber approach are always readable.
+            zones.append(CGRect(x:airfield.position.x-480,
+                                y:airfield.position.y-520,
+                                width:1500,height:1040))
+        case .escort:
+            zones.append(CGRect(x:size.width*0.34-440,
+                                y:size.height*0.35-430,
+                                width:1040,height:1040))
+            for i in allies.indices {
+                let pos=allies[i].position
+                zones.append(CGRect(x:pos.x-250,y:pos.y-250,
+                                    width:500,height:500))
+            }
+        case .ace:
+            zones.append(CGRect(x:p.x+250,y:p.y-500,
+                                width:1050,height:1000))
+        }
+        return zones
+    }
+
+    private func cloudAllowed(_ position:CGPoint, size:CGSize,
+                              safeZones:[CGRect]) -> Bool {
+        // Include the shadow falling down/right of the visible cloud.
+        let footprint=CGRect(x:position.x-size.width*0.55-95,
+                             y:position.y-size.height*0.60-115,
+                             width:size.width*1.10+190,
+                             height:size.height*1.20+230)
+        return !safeZones.contains(where:{ footprint.intersects($0) })
+    }
+
+    private func regenerateCloudField() {
+        for cloud in cloudClusters { cloud.removeFromParent() }
+        cloudClusters.removeAll()
+        cloudAltitudes.removeAll()
+
+        let safeZones=cloudSafetyZones()
+        let textures=(0..<4).map { _ in
+            cloudTexture(seed:Int.random(in:100...9000))
+        }
+        let worldWidth=size.width*battlefieldZoom
+        let worldHeight=size.height*battlefieldZoom
+        let center=player.position == .zero ?
+            CGPoint(x:size.width/2,y:size.height/2) : player.position
         for bank in 0..<4 {
-            let orientation: CGFloat = bank % 2 == 0 ? -0.25 : 0.31
-            for cluster in 0..<7 {
-                let spread = CGFloat(cluster - 3)
-                let drift = CGFloat(bank) * 350
-                let viewWidth = size.width * battlefieldZoom
-                let viewHeight = size.height * battlefieldZoom
-                let x = size.width * 0.5 + CGFloat.random(in:-viewWidth*0.50...viewWidth*0.50) +
-                        drift * 0.12 + spread * 48
-                let y = size.height * 0.5 + CGFloat.random(in:-viewHeight*0.50...viewHeight*0.50) +
-                        CGFloat(bank) * 24 + spread * (bank % 2 == 0 ? 16 : -16)
-                let cloud = SKSpriteNode(texture: shapes[(bank + cluster) % shapes.count])
-                let scale = CGFloat.random(in: 0.68...1.45)
-                cloud.size = CGSize(width: 450 * scale, height: 200 * scale)
-                cloud.alpha = CGFloat.random(in: 0.53...0.83) *
+            for index in 0..<7 {
+                let scale=CGFloat.random(in:0.66...1.30)
+                let dimensions=CGSize(width:450*scale,height:200*scale)
+                var location:CGPoint?
+                // Randomize *both* coordinates and silhouettes on every retry.
+                // Reject positions over protected objectives/approach areas.
+                for _ in 0..<80 {
+                    let candidate=CGPoint(
+                        x:center.x+CGFloat.random(in:-worldWidth*0.52...worldWidth*0.52),
+                        y:center.y+CGFloat.random(in:-worldHeight*0.53...worldHeight*0.53))
+                    if cloudAllowed(candidate,size:dimensions,safeZones:safeZones) {
+                        location=candidate
+                        break
+                    }
+                }
+                guard let position=location else { continue }
+                let cloud=SKSpriteNode(texture:textures[(bank+index)%textures.count])
+                cloud.name="cloud"
+                cloud.size=dimensions
+                cloud.alpha=CGFloat.random(in:0.50...0.82) *
                     CGFloat(prefs.object(forKey:"aces.cloudDensity") as? Double ?? 1.0)
-                cloud.position = CGPoint(x: x, y: y)
-                cloud.zRotation = orientation + CGFloat.random(in: -0.12...0.12)
-                cloud.name = "cloud"
-                cloud.zPosition = 37
+                cloud.position=position
+                cloud.zRotation=CGFloat.random(in:-0.34...0.34)
+                cloud.zPosition=37
+                let shadow=SKSpriteNode(texture:textures[(bank+index)%textures.count])
+                shadow.name="shadow"
+                shadow.color = .black
+                shadow.colorBlendFactor=1
+                shadow.alpha=0.15
+                shadow.size=CGSize(width:dimensions.width*0.98,
+                                   height:dimensions.height*0.90)
+                shadow.position=CGPoint(x:58,y:-72)
+                // Parent the shadow to the cloud, so camera moves and
+                // viewport recycling cannot separate it from the cloud.
+                shadow.zPosition = -41
+                cloud.addChild(shadow)
                 environment.addChild(cloud)
                 cloudClusters.append(cloud)
-                cloudAltitudes.append(CGFloat([6200, 7600, 9400, 10800][bank]))
-
-                let shadow = SKSpriteNode(texture: shapes[(bank + cluster) % shapes.count])
-                shadow.color = SKColor.black
-                shadow.colorBlendFactor = 1
-                shadow.alpha = 0.15
-                shadow.size = CGSize(width: 440 * scale, height: 180 * scale)
-                shadow.position = CGPoint(x: x + 58, y: y - 72)
-                shadow.zRotation = cloud.zRotation
-                shadow.zPosition = -4
-                shadow.name = "shadow"
-                environment.addChild(shadow)
+                cloudAltitudes.append(CGFloat([6200,7600,9400,10800][bank]))
             }
         }
     }
@@ -1542,7 +1593,7 @@ private final class AirBattleScene: SKScene {
             let parallax: CGFloat = node.name == "cloud" ? 0.77 : 1
             node.position.x += scroll.dx * parallax
             node.position.y += scroll.dy * parallax
-            if node.name == "cloud" || node.name == "shadow" {
+            if node.name == "cloud" {
                 let wind: CGFloat = 8 * dt
                 node.position.x += wind
                 let worldWidth = size.width * battlefieldZoom
@@ -1559,6 +1610,16 @@ private final class AirBattleScene: SKScene {
                 }
                 if node.position.y > player.position.y + worldHeight*0.5 + margin {
                     node.position.y -= worldHeight + 2*margin
+                }
+                // Do not let wrapped clouds reappear over the objective.
+                let footprint=node is SKSpriteNode ?
+                    (node as! SKSpriteNode).size : CGSize(width:450,height:220)
+                if !cloudAllowed(node.position,size:footprint,
+                                 safeZones:cloudSafetyZones()) {
+                    node.position=CGPoint(x:player.position.x -
+                           worldWidth*0.40 + CGFloat.random(in:0...worldWidth*0.15),
+                           y:player.position.y +
+                           CGFloat.random(in:-worldHeight*0.4...worldHeight*0.4))
                 }
             }
         }
@@ -2951,6 +3012,8 @@ private final class AirBattleScene: SKScene {
             configureAirfield()
             showMissionBriefing()
         }
+        // A new mission, next mission, or retry always has a fresh pattern.
+        regenerateCloudField()
         if prefs.object(forKey:"aces.soundEnabled") as? Bool ?? true {
             sounds.startEngine(volume:effectsVolume * 0.18)
         }
