@@ -274,59 +274,207 @@ private struct FighterIllustration: View {
     }
 }
 private struct FighterHangarHero: View {
-    let fighter:Fighter
-    var body:some View {
+    let fighter: Fighter
+    private let ink = Color(red:0.29,green:0.24,blue:0.17)
+    private let faint = Color(red:0.54,green:0.43,blue:0.29)
+
+    var body: some View {
         ZStack(alignment:.bottomTrailing) {
-            AsyncImage(url:fighter.archivePhotoURL,
-                       transaction:Transaction(animation:.easeInOut(duration:0.24))) { phase in
-                switch phase {
-                case .success(let photo):
-                    photo.resizable()
-                        .scaledToFill()
-                        .frame(maxWidth:.infinity)
-                        .frame(height:250)
-                        .clipped()
-                case .empty:
-                    FighterIllustration(fighter:fighter)
-                        .frame(height:250)
-                        .overlay {
-                            ProgressView().tint(AcesStyle.ice)
-                        }
-                case .failure:
-                    FighterIllustration(fighter:fighter)
-                        .frame(height:250)
-                @unknown default:
-                    FighterIllustration(fighter:fighter).frame(height:250)
+            LinearGradient(colors:[
+                Color(red:0.88,green:0.83,blue:0.70),
+                Color(red:0.95,green:0.91,blue:0.79),
+                Color(red:0.80,green:0.73,blue:0.58)],
+                startPoint:.topLeading,endPoint:.bottomTrailing)
+            Canvas { context, size in
+                let w=size.width, h=size.height
+                func line(_ from:CGPoint,_ to:CGPoint,weight:CGFloat=1,
+                          alpha:Double=0.85) {
+                    var p=Path()
+                    p.move(to:from); p.addLine(to:to)
+                    context.stroke(p,with:.color(ink.opacity(alpha)),lineWidth:weight)
                 }
-            }
-            .frame(height:250)
-            .background(Color(white:0.08))
-            .overlay(alignment:.bottomLeading) {
-                LinearGradient(colors:[.clear,.black.opacity(0.88)],
-                               startPoint:.center,endPoint:.bottom)
-            }
-            .overlay(alignment:.bottomLeading) {
-                VStack(alignment:.leading,spacing:3) {
-                    Text("HISTORICAL AIRCRAFT PHOTOGRAPH")
-                        .font(.system(size:10,weight:.bold,design:.monospaced))
-                    Text("U.S. AIR FORCE ARCHIVE / WIKIMEDIA COMMONS")
-                        .font(.system(size:9,design:.monospaced))
-                        .foregroundStyle(.white.opacity(0.76))
+                func polygon(_ pts:[CGPoint],weight:CGFloat=1.3) {
+                    guard let first=pts.first else { return }
+                    var p=Path();p.move(to:first)
+                    for v in pts.dropFirst() { p.addLine(to:v) }
+                    p.closeSubpath()
+                    context.stroke(p,with:.color(ink),lineWidth:weight)
                 }
-                .foregroundStyle(.white)
-                .padding(13)
+                func label(_ value:String,_ x:CGFloat,_ y:CGFloat,
+                           font:CGFloat=9,alpha:Double=0.8) {
+                    context.draw(Text(value).font(.system(size:font,weight:.medium,design:.monospaced))
+                        .foregroundColor(ink.opacity(alpha)),at:CGPoint(x:x,y:y),anchor:.leading)
+                }
+
+                // Paper grid, registration marks and faint aged-fiber flecks.
+                for x in stride(from:CGFloat(0),through:w,by:25) {
+                    line(CGPoint(x:x,y:0),CGPoint(x:x,y:h),weight:0.45,alpha:0.10)
+                }
+                for y in stride(from:CGFloat(0),through:h,by:25) {
+                    line(CGPoint(x:0,y:y),CGPoint(x:w,y:y),weight:0.45,alpha:0.10)
+                }
+                for i in 0..<150 {
+                    let x=CGFloat((i*131+37)%997)/997*w
+                    let y=CGFloat((i*193+73)%991)/991*h
+                    let spot=CGRect(x:x,y:y,width:CGFloat(i%3+1),height:0.7)
+                    context.fill(Path(spot),with:.color(faint.opacity(0.09)))
+                }
+                label("U.S. ARMY AIR FORCES   /   ENGINEERING DIVISION",15,17,font:10)
+                label("AIRCRAFT RECOGNITION & MAINTENANCE PLATE",15,33,font:9)
+                label("PLATE  \(fighter == .mustang ? "P-51-D" : fighter == .thunderbolt ? "P-47-D" : fighter == .lightning ? "P-38-J" : "P-40-E")  /  REV. B",w*0.63,17,font:9)
+                line(CGPoint(x:15,y:42),CGPoint(x:w-15,y:42),weight:1.1)
+
+                // FIG. 1: recognizable, model-specific side elevation.
+                // The profiles are original drafting illustrations, not photo overlays.
+                let x0:CGFloat=60, x1:CGFloat=w-52
+                let length=x1-x0
+                let cy:CGFloat=111
+                let radial=fighter == .thunderbolt
+                let twin=fighter == .lightning
+                let noseY:CGFloat=radial ? 12 : 7
+                let noseX=x0+length*0.90
+                let outline:[CGPoint]=[
+                    CGPoint(x:x0+length*0.08,y:cy+9),
+                    CGPoint(x:x0+length*0.16,y:cy+6),
+                    CGPoint(x:x0+length*0.31,y:cy+6),
+                    CGPoint(x:x0+length*0.38,y:cy-13),
+                    CGPoint(x:x0+length*0.45,y:cy-19),
+                    CGPoint(x:x0+length*0.53,y:cy-8),
+                    CGPoint(x:noseX,y:cy-noseY),
+                    CGPoint(x:x0+length*0.96,y:cy),
+                    CGPoint(x:noseX,y:cy+noseY),
+                    CGPoint(x:x0+length*0.54,y:cy+13),
+                    CGPoint(x:x0+length*0.26,y:cy+12),
+                    CGPoint(x:x0+length*0.13,y:cy+10)
+                ]
+                polygon(outline,weight:1.65)
+                // Tail and elevator assembly.
+                polygon([
+                    CGPoint(x:x0+length*0.16,y:cy+7),
+                    CGPoint(x:x0+length*0.13,y:cy-24),
+                    CGPoint(x:x0+length*0.21,y:cy-20),
+                    CGPoint(x:x0+length*0.27,y:cy+5)
+                ],weight:1.2)
+                line(CGPoint(x:x0+length*0.10,y:cy+12),
+                     CGPoint(x:x0+length*0.28,y:cy+12),weight:2.0)
+                // Canopy and framed windscreen.
+                let canopy=Path(ellipseIn:CGRect(x:x0+length*0.39,y:cy-22,
+                                                  width:length*0.13,height:17))
+                context.stroke(canopy,with:.color(ink),lineWidth:1.1)
+                line(CGPoint(x:x0+length*0.47,y:cy-21),
+                     CGPoint(x:x0+length*0.47,y:cy-5),weight:0.8)
+                // Wing appears beneath the fuselage in side elevation.
+                polygon([
+                    CGPoint(x:x0+length*0.44,y:cy+6),
+                    CGPoint(x:x0+length*0.64,y:cy+17),
+                    CGPoint(x:x0+length*0.60,y:cy+21),
+                    CGPoint(x:x0+length*0.42,y:cy+13)
+                ])
+                if radial {
+                    let c=CGPoint(x:noseX-16,y:cy)
+                    context.stroke(Path(ellipseIn:CGRect(x:c.x-16,y:c.y-17,width:32,height:34)),
+                                   with:.color(ink),lineWidth:1.5)
+                    for offset in stride(from:0.0,through:5.0,by:1.0) {
+                        let angle=CGFloat(offset)*CGFloat.pi/3
+                        line(c,CGPoint(x:c.x+cos(angle)*12,y:c.y+sin(angle)*12),
+                             weight:0.7,alpha:0.65)
+                    }
+                }
+                if twin {
+                    // Twin booms visible above and below the central nacelle.
+                    let tailX=x0+length*0.19
+                    line(CGPoint(x:tailX,y:cy-14),
+                         CGPoint(x:x0+length*0.82,y:cy-14),weight:1.15)
+                    line(CGPoint(x:tailX,y:cy+21),
+                         CGPoint(x:x0+length*0.82,y:cy+21),weight:1.15)
+                    for nx in [0.52,0.72] {
+                        let xx=x0+length*nx
+                        context.stroke(Path(ellipseIn:CGRect(x:xx-10,y:cy-22,
+                                                            width:20,height:39)),
+                                       with:.color(ink),lineWidth:1.1)
+                    }
+                } else {
+                    // Single nose propeller with hub and spinner.
+                    let hubX=x0+length*0.96
+                    line(CGPoint(x:hubX+4,y:cy-29),
+                         CGPoint(x:hubX+4,y:cy+29),weight:1.5)
+                    context.stroke(Path(ellipseIn:CGRect(x:hubX-3,y:cy-4,width:8,height:8)),
+                                   with:.color(ink),lineWidth:1.1)
+                }
+                for i in 0..<13 {
+                    let x=x0+length*(0.28+CGFloat(i)*0.040)
+                    context.fill(Path(ellipseIn:CGRect(x:x,y:cy+6,width:1.2,height:1.2)),
+                                 with:.color(ink.opacity(0.52)))
+                }
+                // Technical dimensions, arrowheads, and engineering callouts.
+                let dimY=cy+53
+                line(CGPoint(x:x0+24,y:dimY),CGPoint(x:x1-5,y:dimY),alpha:0.55)
+                for x in [x0+24,x1-5] {
+                    line(CGPoint(x:x,y:dimY-7),CGPoint(x:x,y:dimY+7),alpha:0.6)
+                }
+                label("GENERAL ARRANGEMENT  /  SIDE ELEVATION",x0,cy-42,font:9)
+                label(fighter == .lightning ? "TWIN ENGINE  /  CENTRAL BATTERY" :
+                      radial ? "RADIAL POWERPLANT  /  HEAVY FIGHTER" :
+                      "INLINE POWERPLANT  /  FIGHTER",x0+length*0.45,dimY+10,font:8)
+                line(CGPoint(x:x0+length*0.59,y:cy-26),
+                     CGPoint(x:x0+length*0.73,y:cy-42),alpha:0.65)
+
+                // FIG. 2: distinct planform and twin-boom construction.
+                let topX=w*0.26, topY:h-47, scale:CGFloat=0.32
+                func p(_ x:CGFloat,_ y:CGFloat)->CGPoint {
+                    CGPoint(x:topX+x*scale,y:topY+y*scale)
+                }
+                let span:CGFloat=twin ? 130 : radial ? 116 : fighter == .mustang ? 112 : 104
+                polygon([p(0,-82),p(-9,-37),p(-span*0.83,-12),p(-span,0),
+                         p(-span,10),p(-14,9),p(-11,58),p(-37,70),
+                         p(-37,78),p(37,78),p(37,70),p(11,58),
+                         p(14,9),p(span,10),p(span,0),p(span*0.83,-12),
+                         p(9,-37)],weight:1.0)
+                if twin {
+                    for x in [-47.0,47.0] {
+                        line(p(CGFloat(x),-47),p(CGFloat(x),64),weight:1.4)
+                    }
+                }
+                label("FIG. 2  /  PLANFORM",w*0.10,h-13,font:9)
+                // FIG. 3: front elevation, four-engine separation for P-38.
+                let frontX=w*0.66, frontY=h-55
+                line(CGPoint(x:frontX-72,y:frontY),CGPoint(x:frontX+72,y:frontY),weight:1.2)
+                line(CGPoint(x:frontX,y:frontY-27),
+                     CGPoint(x:frontX,y:frontY+28),weight:1.3)
+                let engineCount=twin ? 2 : 1
+                for i in 0..<engineCount {
+                    let cx=frontX+(twin ? (i == 0 ? -40 : 40) : 0)
+                    context.stroke(Path(ellipseIn:CGRect(x:cx-12,y:frontY-12,width:24,height:24)),
+                                   with:.color(ink),lineWidth:1.1)
+                }
+                label("FIG. 3  /  FRONT",w*0.57,h-13,font:9)
             }
-            // Existing aircraft shape remains available as a small schematic.
+            .padding(2)
+            VStack {
+                Spacer()
+                HStack {
+                    Text("AAF / TECHNICAL ORDER")
+                        .font(.system(size:9,weight:.bold,design:.monospaced))
+                        .foregroundColor(ink.opacity(0.68))
+                    Spacer()
+                    Text("NOT TO SCALE   •   ARCHIVAL PLATE")
+                        .font(.system(size:9,weight:.medium,design:.monospaced))
+                        .foregroundColor(ink.opacity(0.68))
+                }.padding(.horizontal,14).padding(.bottom,6)
+            }
             FighterIllustration(fighter:fighter)
-                .frame(width:109,height:81)
-                .background(.black.opacity(0.78),
-                            in:RoundedRectangle(cornerRadius:8))
-                .overlay(RoundedRectangle(cornerRadius:8)
-                    .stroke(AcesStyle.ice.opacity(0.55),lineWidth:0.7))
-                .padding(11)
+                .frame(width:85,height:65)
+                .saturation(0)
+                .opacity(0.85)
+                .background(Color(red:0.77,green:0.69,blue:0.53).opacity(0.92),
+                            in:RoundedRectangle(cornerRadius:3))
+                .overlay(RoundedRectangle(cornerRadius:3)
+                         .stroke(ink.opacity(0.56),lineWidth:0.7))
+                .padding(10)
         }
         .frame(height:250)
-        .clipShape(RoundedRectangle(cornerRadius:10))
+        .clipShape(RoundedRectangle(cornerRadius:5))
+        .overlay(RoundedRectangle(cornerRadius:5).stroke(ink.opacity(0.48),lineWidth:1))
     }
 }
 private struct AcesSettings: View {
