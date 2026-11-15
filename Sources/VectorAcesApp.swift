@@ -446,13 +446,9 @@ private struct FighterHangarHero: View {
     }
 
     var body: some View {
-        ZStack(alignment:.bottomTrailing) {
-            LinearGradient(colors:[
-                Color(red:0.88,green:0.83,blue:0.70),
-                Color(red:0.95,green:0.91,blue:0.79),
-                Color(red:0.80,green:0.73,blue:0.58)],
-                startPoint:.topLeading,endPoint:.bottomTrailing)
-            Group {
+        GeometryReader { geometry in
+            ZStack {
+                Color(red: 0.88, green: 0.83, blue: 0.70)
                 let plateName: String = {
                     switch fighter {
                     case .mustang: return "HangarP51"
@@ -466,21 +462,24 @@ private struct FighterHangarHero: View {
                     Image(nsImage: plate)
                         .resizable()
                         .interpolation(.high)
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
                 } else {
                     Canvas { context, size in
                         drawPlate(context, size: size)
                     }
-                    .padding(2)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                 }
             }
-
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .overlay(RoundedRectangle(cornerRadius: 5)
+                .stroke(ink.opacity(0.48), lineWidth: 1))
         }
-        .aspectRatio(1.56, contentMode: .fit)
+        // The original plates are 768 x 512. Always reserve their full
+        // 3:2 geometry instead of squeezing them into a 250pt tall strip.
+        .aspectRatio(3.0 / 2.0, contentMode: .fit)
         .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius:5))
-        .overlay(RoundedRectangle(cornerRadius:5).stroke(ink.opacity(0.48),lineWidth:1))
     }
 }
 private struct AcesSettings: View {
@@ -633,34 +632,37 @@ private struct AcesPilotRecordSheet: View {
     }
     private var hangarCatalog: some View {
         GeometryReader { viewport in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("FUN CITY  /  VECTOR SERIES  /  HANGAR")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .tracking(2).foregroundStyle(AcesStyle.ice)
-                            Text("VECTOR ACES")
-                                .font(.system(size: 38, weight: .black, design: .rounded))
-                            Text("WORLD WAR II  •  AIRCRAFT CATALOG")
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                .tracking(2).foregroundStyle(AcesStyle.amber)
-                        }
-                        Spacer(minLength: 6)
-                        Button("PILOT RECORD") { showingPilotRecord = true }
-                            .buttonStyle(.bordered).tint(AcesStyle.amber)
-                        Button("CUSTOM SETTINGS") { showingSettings = true }
-                            .buttonStyle(.bordered).tint(AcesStyle.ice)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("FUN CITY  /  VECTOR SERIES  /  HANGAR")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .tracking(2).foregroundStyle(AcesStyle.ice)
+                        Text("VECTOR ACES")
+                            .font(.system(size: 38, weight: .black, design: .rounded))
+                        Text("WORLD WAR II  •  AIRCRAFT CATALOG")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .tracking(2).foregroundStyle(AcesStyle.amber)
                     }
-                    HStack(alignment: .top, spacing: 16) {
-                        hangarAircraftPicker(availableHeight: max(410, viewport.size.height - 150))
-                        hangarAircraftDetails
-                    }
+                    Spacer(minLength: 6)
+                    Button("PILOT RECORD") { showingPilotRecord = true }
+                        .buttonStyle(.bordered).tint(AcesStyle.amber)
+                    Button("CUSTOM SETTINGS") { showingSettings = true }
+                        .buttonStyle(.bordered).tint(AcesStyle.ice)
                 }
-                .padding(20)
-                .frame(maxWidth: 1280)
-                .frame(maxWidth: .infinity)
+                HStack(alignment: .top, spacing: 16) {
+                    hangarAircraftPicker(availableHeight: max(360, viewport.size.height - 165))
+                    ScrollView {
+                        hangarAircraftDetails
+                            .frame(maxWidth: .infinity)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: max(360, viewport.size.height - 165))
+                }
             }
+            .padding(20)
+            .frame(maxWidth: 1280, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
 
