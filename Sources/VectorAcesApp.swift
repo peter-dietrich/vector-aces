@@ -53,6 +53,22 @@ extension Fighter {
         case .warhawk: return [("SPEED",7),("ACCELERATION",7),("TURN",8),("CLIMB",6),("DURABILITY",5),("FIREPOWER",7),("AMMO",6)]
         }
     }
+    // Public-domain reference photographs hosted by Wikimedia Commons.
+    // Keep the original SpriteKit vector aircraft for actual gameplay.
+    var archivePhotoURL: URL? {
+        let source: String
+        switch self {
+        case .mustang:
+            source="https://upload.wikimedia.org/wikipedia/commons/d/d0/North_American_P-51D_Mustang_USAF.jpg"
+        case .thunderbolt:
+            source="https://upload.wikimedia.org/wikipedia/commons/7/7c/Republic_P-47N_Thunderbolt_in_flight.jpg"
+        case .lightning:
+            source="https://upload.wikimedia.org/wikipedia/commons/b/bd/Lockheed_P-38_Lightning_USAF.JPG"
+        case .warhawk:
+            source="https://upload.wikimedia.org/wikipedia/commons/c/c3/Curtiss_P-40E_Warhawk_USAF.jpg"
+        }
+        return URL(string:source)
+    }
     var ammunition: Int {
         switch self {
         case .mustang: return 1800
@@ -255,6 +271,62 @@ private struct FighterIllustration: View {
                 }.stroke(AcesStyle.ice.opacity(0.07),lineWidth:0.7)
             }
         }
+    }
+}
+private struct FighterHangarHero: View {
+    let fighter:Fighter
+    var body:some View {
+        ZStack(alignment:.bottomTrailing) {
+            AsyncImage(url:fighter.archivePhotoURL,
+                       transaction:Transaction(animation:.easeInOut(duration:0.24))) { phase in
+                switch phase {
+                case .success(let photo):
+                    photo.resizable()
+                        .scaledToFill()
+                        .frame(maxWidth:.infinity)
+                        .frame(height:250)
+                        .clipped()
+                case .empty:
+                    FighterIllustration(fighter:fighter)
+                        .frame(height:250)
+                        .overlay {
+                            ProgressView().tint(AcesStyle.ice)
+                        }
+                case .failure:
+                    FighterIllustration(fighter:fighter)
+                        .frame(height:250)
+                @unknown default:
+                    FighterIllustration(fighter:fighter).frame(height:250)
+                }
+            }
+            .frame(height:250)
+            .background(Color(white:0.08))
+            .overlay(alignment:.bottomLeading) {
+                LinearGradient(colors:[.clear,.black.opacity(0.88)],
+                               startPoint:.center,endPoint:.bottom)
+            }
+            .overlay(alignment:.bottomLeading) {
+                VStack(alignment:.leading,spacing:3) {
+                    Text("HISTORICAL AIRCRAFT PHOTOGRAPH")
+                        .font(.system(size:10,weight:.bold,design:.monospaced))
+                    Text("U.S. AIR FORCE ARCHIVE / WIKIMEDIA COMMONS")
+                        .font(.system(size:9,design:.monospaced))
+                        .foregroundStyle(.white.opacity(0.76))
+                }
+                .foregroundStyle(.white)
+                .padding(13)
+            }
+            // Existing aircraft shape remains available as a small schematic.
+            FighterIllustration(fighter:fighter)
+                .frame(width:109,height:81)
+                .background(.black.opacity(0.78),
+                            in:RoundedRectangle(cornerRadius:8))
+                .overlay(RoundedRectangle(cornerRadius:8)
+                    .stroke(AcesStyle.ice.opacity(0.55),lineWidth:0.7))
+                .padding(11)
+        }
+        .frame(height:250)
+        .clipShape(RoundedRectangle(cornerRadius:10))
     }
 }
 private struct AcesSettings: View {
@@ -553,9 +625,7 @@ private struct AcesPilotRecordSheet: View {
                                             .font(.system(size:10,design:.monospaced))
                                             .foregroundStyle(AcesStyle.ice.opacity(0.7))
                                     }
-                                    FighterIllustration(fighter:fighter)
-                                        .frame(height:226)
-                                        .background(.black.opacity(0.18),in:RoundedRectangle(cornerRadius:8))
+                                    FighterHangarHero(fighter:fighter)
                                     LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:10) {
                                         ForEach(0..<fighter.stats.count,id:\.self) { index in
                                             let stat = fighter.stats[index]
@@ -617,7 +687,7 @@ private struct AcesGameWindow: View {
                             Text("VECTOR ACES")
                                 .font(.system(size:19,weight:.black,design:.monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.14d")
+                            Text("v2026.11.15a")
                                 .font(.system(size:10,weight:.medium,design:.monospaced))
                                 .foregroundStyle(.gray)
                         }
