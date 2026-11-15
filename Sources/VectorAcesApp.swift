@@ -2285,7 +2285,7 @@ private final class AirBattleScene: SKScene {
         // Difficulty scales acquisition, cadence and accuracy.
         let gunRange:CGFloat = difficulty == 0 ? 240 : difficulty == 1 ? 390 : 530
         let rearAngle=atan2(sin(playerBearing-b.heading),cos(playerBearing-b.heading))
-        let rearArc=abs(abs(rearAngle)-.pi)
+        let rearArc=abs(abs(rearAngle) - .pi)
         let rearLimit:CGFloat=difficulty == 0 ? 0.38 : difficulty == 1 ? 0.72 : 0.97
         let obscured=cloudCover || coveredByCloud(b.position,altitude:b.altitude)
         if b.fireCooldown <= 0 && playerDistance < gunRange &&
