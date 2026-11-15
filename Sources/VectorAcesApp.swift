@@ -687,7 +687,7 @@ private struct AcesGameWindow: View {
                             Text("VECTOR ACES")
                                 .font(.system(size:19,weight:.black,design:.monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.15a")
+                            Text("v2026.11.15b")
                                 .font(.system(size:10,weight:.medium,design:.monospaced))
                                 .foregroundStyle(.gray)
                         }
@@ -2071,7 +2071,7 @@ private final class AirBattleScene: SKScene {
             sprite.zRotation = toward - .pi/2
             var bomber = Bandit(sprite:sprite,position:point,heading:toward,
                                 speed:108,health:3,kind:2,
-                                formationTime:0,fireCooldown:100,
+                                formationTime:0,fireCooldown:CGFloat.random(in:1.6...3.1),
                                 targetOffset:0,tactic:.formation,tacticTime:0,
                                 maneuverSign:1,entryHeading:toward,
                                 previousDistance:0,missionBomber:true)
@@ -2763,7 +2763,9 @@ private final class AirBattleScene: SKScene {
                             bandits[j].evadeCooldown = bandits[j].missionBomber ?
                                 (level == 0 ? 7.5 : level == 1 ? 4.0 : 2.8) : 4.8
                             bandits[j].maneuverSign = Bool.random() ? 1 : -1
-                            bandits[j].fireCooldown = max(bandits[j].fireCooldown,0.55)
+                            bandits[j].fireCooldown = bandits[j].missionBomber ?
+                                min(bandits[j].fireCooldown,1.4) :
+                                max(bandits[j].fireCooldown,0.55)
                         }
                         burst(at: bullet.position, count: 5)
                         consumed = true
