@@ -2236,19 +2236,80 @@ private final class AirBattleScene: SKScene {
     }
 
     private func advanceMissionBomber(_ b: inout Bandit,
-                                      dt: CGFloat, scrolling: CGVector) {
+                                      dt: CGFloat, scrolling: CGVector,
+                                      difficulty: Int) {
         let dx = airfield.position.x - b.position.x
         let dy = airfield.position.y - b.position.y
-        let toward = atan2(dy,dx)
-        let difference = atan2(sin(toward-b.heading),cos(toward-b.heading))
-        b.heading += max(-0.48*dt,min(0.48*dt,difference))
-        b.position.x += cos(b.heading)*b.speed*dt + scrolling.dx
-        b.position.y += sin(b.heading)*b.speed*dt + scrolling.dy
-        b.altitude = max(3200, b.altitude - 13 * dt)
-        b.sprite.position = b.position
-        b.sprite.zRotation = b.heading - .pi/2
-        let visual = 1 + max(-0.12,min(0.10,(b.altitude-altitude)/6000))
-        b.sprite.setScale(b.sizeAtSpawn * visual)
+        let playerDx = player.position.x - b.position.x
+        let playerDy = player.position.y - b.position.y
+        let playerDistance = hypot(playerDx,playerDy)
+        let playerBearing = atan2(playerDy,playerDx)
+        let verticalSeparation = abs(altitude-b.altitude)
+        b.evadeCooldown=max(0,b.evadeCooldown-dt)
+        b.fireCooldown -= dt
+        b.tacticTime -= dt
+
+        // Bomber pilots prioritize the objective, but react more decisively
+        // to nearby threats at Veteran/Ace. Rookie keeps an easy, nearly
+        // straight run, and all three difficulties remain interceptable.
+        let pursuitRange:CGFloat = difficulty == 0 ? 250 : difficulty == 1 ? 420 : 600
+        let isThreat = playerDistance < pursuitRange && verticalSeparation < 1100
+        let playerBehind = cos(b.heading)*playerDx+sin(b.heading)*playerDy < 0
+        if isThreat && playerBehind && b.evadeCooldown <= 0 {
+            let reactionChance:CGFloat = difficulty == 0 ? 0.20 : difficulty == 1 ? 0.65 : 0.98
+            if CGFloat.random(in:0...1) < reactionChance {
+                b.tactic = .evade
+                b.tacticTime=CGFloat.random(in:1.0...1.65)
+                b.maneuverSign=Bool.random() ? 1 : -1
+            }
+            b.evadeCooldown=difficulty == 0 ? 9.0 : difficulty == 1 ? 5.0 : 3.1
+        }
+        if b.tactic == .evade && b.tacticTime <= 0 { b.tactic = .formation }
+        let toward=atan2(dy,dx)
+        let evasiveAngle:CGFloat = difficulty == 0 ? 0.24 : difficulty == 1 ? 0.48 : 0.67
+        let desired=b.tactic == .evade ?
+            toward + b.maneuverSign*evasiveAngle : toward
+        let difference=atan2(sin(desired-b.heading),cos(desired-b.heading))
+        let turnRate:CGFloat=difficulty == 0 ? 0.45 : difficulty == 1 ? 0.75 : 1.05
+        let turn=max(-turnRate*dt,min(turnRate*dt,difference))
+        b.heading += turn
+        let speedGoal:CGFloat = b.tactic == .evade ?
+            (difficulty == 2 ? 147 : 130) : 108
+        b.speed += max(-28*dt,min(28*dt,speedGoal-b.speed))
+        b.position.x += cos(b.heading)*b.speed*dt+scrolling.dx
+        b.position.y += sin(b.heading)*b.speed*dt+scrolling.dy
+        b.altitude=max(3200,b.altitude-13*dt)
+
+        // Stukas have rear defensive gunners. The player must be behind
+        // their longitudinal axis, close in altitude and within gun range.
+        // Difficulty scales acquisition, cadence and accuracy.
+        let gunRange:CGFloat = difficulty == 0 ? 240 : difficulty == 1 ? 390 : 530
+        let rearAngle=atan2(sin(playerBearing-b.heading),cos(playerBearing-b.heading))
+        let rearArc=abs(abs(rearAngle)-.pi)
+        let rearLimit:CGFloat=difficulty == 0 ? 0.38 : difficulty == 1 ? 0.72 : 0.97
+        let obscured=cloudCover || coveredByCloud(b.position,altitude:b.altitude)
+        if b.fireCooldown <= 0 && playerDistance < gunRange &&
+           verticalSeparation < 650 && rearArc < rearLimit &&
+           (!obscured || playerDistance < 175) {
+            let aimError:CGFloat = difficulty == 0 ? 0.22 :
+                                   difficulty == 1 ? 0.105 : 0.045
+            let gunAngle=playerBearing + CGFloat.random(in:-aimError...aimError)
+            fire(from:b.position,angle:gunAngle,hostile:true,
+                 forward:-26,sourceAltitude:b.altitude)
+            sounds.play(.gun,volume:effectsVolume*0.055)
+            b.fireCooldown=(difficulty == 0 ? 3.9 : difficulty == 1 ? 2.05 : 1.15) +
+                CGFloat.random(in:0.1...0.5)
+        }
+
+        b.sprite.position=b.position
+        b.sprite.zRotation=b.heading - .pi/2
+        let visual=1+max(-0.12,min(0.10,(b.altitude-altitude)/6000))
+        b.sprite.setScale(b.sizeAtSpawn*visual)
+        let rollTarget=max(-1,min(1,turn/max(dt,0.001)*1.7))
+        b.bankVisual += (rollTarget-b.bankVisual)*min(1,dt*4.0)
+        if let art=b.sprite.children.first {
+            applyBankProjection(art,bank:b.bankVisual)
+        }
     }
 
     private func evaluateMission() {
@@ -2404,7 +2465,8 @@ private final class AirBattleScene: SKScene {
         for i in bandits.indices {
             var b = bandits[i]
             if b.missionBomber {
-                advanceMissionBomber(&b,dt:dt,scrolling:scrolling)
+                advanceMissionBomber(&b,dt:dt,scrolling:scrolling,
+                                     difficulty:difficulty)
                 bandits[i] = b
                 continue
             }
@@ -2530,7 +2592,10 @@ private final class AirBattleScene: SKScene {
 
             let turnRate: CGFloat = b.kind == 1 ? 2.45 : b.kind == 0 ? 1.85 : 1.05
             let delta = atan2(sin(desired-b.heading),cos(desired-b.heading))
-            b.heading += max(-turnRate*dt,min(turnRate*dt,delta))
+            let turn=max(-turnRate*dt,min(turnRate*dt,delta))
+            b.heading += turn
+            let rollTarget=max(-1,min(1,(turn/max(dt,0.001))*0.63))
+            b.bankVisual += (rollTarget-b.bankVisual)*min(1,dt*5)
             let speedGoal: CGFloat
             switch b.tactic {
             case .formation: speedGoal = b.kind == 2 ? 160 : 230
@@ -2554,6 +2619,9 @@ private final class AirBattleScene: SKScene {
             b.sprite.zRotation = b.heading - .pi/2
             let visual = 1 + max(-0.12,min(0.10,(b.altitude-altitude)/6000))
             b.sprite.setScale(b.sizeAtSpawn * visual)
+            if let art=b.sprite.children.first {
+                applyBankProjection(art,bank:b.bankVisual)
+            }
 
             let aim = abs(atan2(sin(bearing-b.heading),cos(bearing-b.heading)))
             let aimTolerance: CGFloat = difficulty == 0 ? 0.11 : difficulty == 1 ? 0.16 : 0.20
@@ -2687,11 +2755,13 @@ private final class AirBattleScene: SKScene {
                         bandits[j].health -= 1
                         // Direct hits provoke a defensive break rather than a
                         // pilot blindly continuing a straight firing run.
-                        if bandits[j].health > 0 && !bandits[j].missionBomber &&
+                        if bandits[j].health > 0 &&
                            bandits[j].evadeCooldown <= 0 {
                             bandits[j].tactic = .evade
                             bandits[j].tacticTime = CGFloat.random(in:0.75...1.3)
-                            bandits[j].evadeCooldown = 4.8
+                            let level=max(0,min(2,prefs.integer(forKey:"aces.difficulty")))
+                            bandits[j].evadeCooldown = bandits[j].missionBomber ?
+                                (level == 0 ? 7.5 : level == 1 ? 4.0 : 2.8) : 4.8
                             bandits[j].maneuverSign = Bool.random() ? 1 : -1
                             bandits[j].fireCooldown = max(bandits[j].fireCooldown,0.55)
                         }
