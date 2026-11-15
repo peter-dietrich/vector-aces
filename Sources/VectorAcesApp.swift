@@ -640,7 +640,12 @@ private struct AcesPilotRecordSheet: View {
                             .tracking(2).foregroundStyle(AcesStyle.ice)
                         Text("VECTOR ACES")
                             .font(.system(size: 38, weight: .black, design: .rounded))
-                        Text("WORLD WAR II  •  AIRCRAFT CATALOG")
+                        HStack(spacing: 12) {
+                            Text("WORLD WAR II  •  AIRCRAFT CATALOG")
+                            Text("BUILD 2026.11.15 (4) • HANGAR FIT")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(AcesStyle.ice.opacity(0.75))
+                        }
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .tracking(2).foregroundStyle(AcesStyle.amber)
                     }
@@ -681,7 +686,7 @@ private struct AcesPilotRecordSheet: View {
                     }
                     .labelsHidden().pickerStyle(.segmented)
                     Text(playMode == AcesPlayMode.interception.rawValue
-                        ? "CAMPAIGN • ((AcesCampaignMission(rawValue:selectedMission) ?? .stukas).title)"
+                        ? "CAMPAIGN • \((AcesCampaignMission(rawValue: selectedMission) ?? .stukas).title)"
                         : "FREE FLIGHT • ENDLESS FORMATIONS")
                         .font(.system(size: 9, weight: .medium, design: .monospaced))
                         .foregroundStyle(AcesStyle.amber)
@@ -718,7 +723,7 @@ private struct AcesPilotRecordSheet: View {
                                 .font(.system(size: 9, design: .monospaced))
                                 .foregroundStyle(.white.opacity(0.66))
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text("PILOT: (AcesPilotLog.rank)  •  SORTIES (UserDefaults.standard.integer(forKey: "aces.campaign.sorties"))")
+                            Text("PILOT: \(AcesPilotLog.rank)  •  SORTIES \(UserDefaults.standard.integer(forKey: "aces.campaign.sorties"))")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(AcesStyle.ice)
                         }
