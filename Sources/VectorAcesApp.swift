@@ -768,6 +768,9 @@ private final class AirBattleScene: SKScene {
     private let airfield = SKNode()
     private let missionText = SKLabelNode(fontNamed:"Menlo-Bold")
     private let missionBackdrop = SKShapeNode()
+    private let classifiedStamp = SKLabelNode(fontNamed:"AmericanTypewriter-Bold")
+    private let briefingLetterhead = SKLabelNode(fontNamed:"AmericanTypewriter-Bold")
+    private var paperTexture: SKTexture?
     private let missionCopy = (0..<6).map { _ in SKLabelNode(fontNamed:"Menlo") }
     private var player = SKNode()
     private let playerArtwork = SKNode()
@@ -1720,48 +1723,128 @@ private final class AirBattleScene: SKScene {
         environment.addChild(airfield)
     }
 
+    private func makeBriefingPaper() -> SKTexture {
+        let w:CGFloat=1000, h:CGFloat=530
+        let image=NSImage(size:NSSize(width:w,height:h),flipped:false) { _ in
+            guard let ctx=NSGraphicsContext.current?.cgContext else { return false }
+            let rect=CGRect(x:0,y:0,width:w,height:h)
+            let colors=[CGColor(red:0.68,green:0.59,blue:0.42,alpha:1),
+                        CGColor(red:0.91,green:0.84,blue:0.65,alpha:1),
+                        CGColor(red:0.75,green:0.67,blue:0.49,alpha:1)]
+            let space=CGColorSpaceCreateDeviceRGB()
+            if let gradient=CGGradient(colorsSpace:space,
+                 colors:colors as CFArray,locations:[0,0.52,1]) {
+                ctx.drawLinearGradient(gradient,start:CGPoint(x:0,y:0),
+                                       end:CGPoint(x:w,y:h),options:[])
+            }
+            // Fold marks, discoloration and irregular typewriter-paper fibers.
+            for _ in 0..<1800 {
+                let x=CGFloat.random(in:5...(w-5))
+                let y=CGFloat.random(in:5...(h-5))
+                let tone=CGFloat.random(in:0.04...0.17)
+                ctx.setFillColor(CGColor(red:0.36,green:0.27,blue:0.16,
+                                        alpha:tone))
+                ctx.fill(CGRect(x:x,y:y,width:CGFloat.random(in:0.5...2.8),
+                                height:CGFloat.random(in:0.4...1.8)))
+            }
+            ctx.setStrokeColor(CGColor(red:0.37,green:0.28,blue:0.18,alpha:0.22))
+            ctx.setLineWidth(1.8)
+            for x in [w*0.37,w*0.71] {
+                ctx.move(to:CGPoint(x:x,y:0))
+                ctx.addLine(to:CGPoint(x:x+3,y:h))
+                ctx.strokePath()
+            }
+            ctx.setStrokeColor(CGColor(red:0.44,green:0.32,blue:0.16,alpha:0.35))
+            ctx.setLineWidth(3)
+            ctx.stroke(CGRect(x:9,y:10,width:w-18,height:h-20))
+            ctx.setStrokeColor(CGColor(red:0.54,green:0.39,blue:0.17,alpha:0.31))
+            ctx.setLineWidth(1)
+            ctx.stroke(CGRect(x:20,y:20,width:w-40,height:h-40))
+            // Stained curled-paper corners without a literal straight neon box.
+            for corner in [CGPoint(x:13,y:14),CGPoint(x:w-13,y:14),
+                           CGPoint(x:13,y:h-14),CGPoint(x:w-13,y:h-14)] {
+                ctx.setFillColor(CGColor(red:0.40,green:0.27,blue:0.12,alpha:0.13))
+                ctx.fillEllipse(in:CGRect(x:corner.x-52,y:corner.y-36,
+                                          width:104,height:72))
+            }
+            return true
+        }
+        let texture=SKTexture(image:image)
+        texture.filteringMode = .linear
+        return texture
+    }
+
     private func configureMissionOverlay() {
         missionBackdrop.zPosition = 175
         missionBackdrop.fillColor = SKColor(calibratedRed:0.018,green:0.038,blue:0.065,alpha:0.91)
         missionBackdrop.strokeColor = .cyan.withAlphaComponent(0.46)
         missionBackdrop.lineWidth = 1.3
         addChild(missionBackdrop)
+        paperTexture=makeBriefingPaper()
         for (index,label) in missionCopy.enumerated() {
-            label.fontSize = index == 0 ? 21 : index == 5 ? 15 : 13
-            label.fontName = index == 0 || index == 5 ? "Menlo-Bold" : "Menlo"
-            label.fontColor = index == 0 ? .cyan :
-                index == 5 ? .orange : .white
+            label.fontSize=index == 0 ? 21 : index == 5 ? 15 : 13
+            label.fontName=index == 0 || index == 5 ? "Menlo-Bold" : "Menlo"
+            label.fontColor=index == 0 ? .cyan : index == 5 ? .orange : .white
             label.horizontalAlignmentMode = .center
             label.verticalAlignmentMode = .center
-            label.zPosition = 177
+            label.zPosition=177
             addChild(label)
         }
-        missionText.fontSize = 12
+        briefingLetterhead.text="U.S. ARMY AIR FORCES  /  OPERATION ORDER"
+        briefingLetterhead.fontSize=13
+        briefingLetterhead.fontColor=SKColor(red:0.27,green:0.19,blue:0.12,alpha:1)
+        briefingLetterhead.horizontalAlignmentMode = .left
+        briefingLetterhead.zPosition=178
+        briefingLetterhead.isHidden=true
+        addChild(briefingLetterhead)
+        classifiedStamp.text="TOP SECRET"
+        classifiedStamp.fontSize=22
+        classifiedStamp.fontColor=SKColor(red:0.55,green:0.11,blue:0.09,alpha:0.78)
+        classifiedStamp.zRotation = -0.11
+        classifiedStamp.zPosition=179
+        classifiedStamp.isHidden=true
+        addChild(classifiedStamp)
+
+        missionText.fontSize=12
         missionText.fontColor = .orange
         missionText.horizontalAlignmentMode = .left
-        missionText.zPosition = 102
+        missionText.zPosition=102
         addChild(missionText)
         layoutMissionOverlay()
     }
 
     private func layoutMissionOverlay() {
         guard playMode == .interception else { return }
-        let boxWidth = min(size.width - 90,720)
-        let boxHeight: CGFloat = 300
-        let rect = CGRect(x:(size.width-boxWidth)/2,
-                          y:(size.height-boxHeight)/2,
-                          width:boxWidth,height:boxHeight)
-        missionBackdrop.path = CGPath(roundedRect:rect,cornerWidth:13,cornerHeight:13,transform:nil)
+        let paper=missionStage == .briefing
+        let boxWidth=min(size.width-80,paper ? CGFloat(790) : CGFloat(720))
+        let boxHeight=min(size.height*0.83,paper ? CGFloat(420) : CGFloat(300))
+        let rect=CGRect(x:(size.width-boxWidth)*0.5,
+                        y:(size.height-boxHeight)*0.5,
+                        width:boxWidth,height:boxHeight)
+        missionBackdrop.path=CGPath(roundedRect:rect,
+            cornerWidth:paper ? 2 : 13,cornerHeight:paper ? 2 : 13,
+            transform:nil)
+        let lineStep=paper ? min(50,(boxHeight-100)/6) : 46
         for (i,label) in missionCopy.enumerated() {
-            label.position = CGPoint(x:rect.midX,y:rect.maxY - CGFloat(i)*46 - 41)
+            label.position=CGPoint(x:paper ? rect.minX+52 : rect.midX,
+                y:rect.maxY-(paper ? CGFloat(110):CGFloat(41)) -
+                  CGFloat(i)*lineStep)
+            label.horizontalAlignmentMode=paper ? .left : .center
         }
-        missionText.position = CGPoint(x:size.width/2,y:size.height-26)
+        briefingLetterhead.position=CGPoint(x:rect.minX+52,y:rect.maxY-34)
+        classifiedStamp.position=CGPoint(x:rect.maxX-127,y:rect.maxY-51)
+        missionText.position=CGPoint(x:size.width/2,y:size.height-26)
         missionText.horizontalAlignmentMode = .center
     }
 
     private func showMissionBriefing() {
         missionStage = .briefing
         missionBackdrop.isHidden = false
+        missionBackdrop.fillTexture = paperTexture
+        missionBackdrop.fillColor = .white
+        missionBackdrop.strokeColor = SKColor(red:0.40,green:0.27,blue:0.13,alpha:0.9)
+        classifiedStamp.isHidden = false
+        briefingLetterhead.isHidden = false
         let lines: [String]
         switch campaignMission {
         case .stukas:
@@ -1793,7 +1876,17 @@ private final class AirBattleScene: SKScene {
                 "BRIDGE INTEGRITY 3  •  155 SECOND LIMIT",
                 "PRESS RETURN TO LAUNCH"]
         }
-        for (label,line) in zip(missionCopy,lines) { label.text=line;label.isHidden=false }
+        for (index,item) in missionCopy.enumerated() {
+            item.text=lines[index]
+            item.isHidden=false
+            item.fontName=index == 0 || index == 5 ?
+                "AmericanTypewriter-Bold" : "AmericanTypewriter"
+            item.fontSize=index == 0 ? 20 : index == 5 ? 15 : 13
+            item.fontColor=index == 5 ?
+                SKColor(red:0.52,green:0.12,blue:0.08,alpha:1) :
+                SKColor(red:0.21,green:0.15,blue:0.10,alpha:1)
+        }
+        layoutMissionOverlay()
         missionText.text = ""
         status.text = ""
     }
@@ -1825,6 +1918,8 @@ private final class AirBattleScene: SKScene {
         guard playMode == .interception && missionStage == .briefing else { return }
         missionStage = .active
         missionBackdrop.isHidden = true
+        classifiedStamp.isHidden = true
+        briefingLetterhead.isHidden = true
         missionCopy.forEach { $0.isHidden = true }
         missionTime = 0
         gameTime = 0
@@ -2108,10 +2203,20 @@ private final class AirBattleScene: SKScene {
             footer
         ]
         missionBackdrop.isHidden = false
-        for (label,line) in zip(missionCopy,lines) {
-            label.text = line
-            label.isHidden = false
+        missionBackdrop.fillTexture = nil
+        missionBackdrop.fillColor = SKColor(calibratedRed:0.018,green:0.038,
+                                            blue:0.065,alpha:0.94)
+        missionBackdrop.strokeColor = .cyan.withAlphaComponent(0.46)
+        classifiedStamp.isHidden = true
+        briefingLetterhead.isHidden = true
+        for (index,label) in missionCopy.enumerated() {
+            label.text=lines[index]
+            label.isHidden=false
+            label.fontName=index == 0 || index == 5 ? "Menlo-Bold" : "Menlo"
+            label.fontSize=index == 0 ? 21 : index == 5 ? 15 : 13
+            label.fontColor=index == 0 ? .cyan : index == 5 ? .orange : .white
         }
+        layoutMissionOverlay()
         missionText.text = ""
         status.text = ""
         if success && campaignMission == .stukas {
