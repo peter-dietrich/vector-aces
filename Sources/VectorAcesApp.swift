@@ -452,33 +452,33 @@ private struct FighterHangarHero: View {
                 Color(red:0.95,green:0.91,blue:0.79),
                 Color(red:0.80,green:0.73,blue:0.58)],
                 startPoint:.topLeading,endPoint:.bottomTrailing)
-            Canvas { context,size in
-                drawPlate(context,size:size)
+            Group {
+                let plateName: String = {
+                    switch fighter {
+                    case .mustang: return "HangarP51"
+                    case .thunderbolt: return "HangarP47"
+                    case .lightning: return "HangarP38"
+                    case .warhawk: return "HangarP40"
+                    }
+                }()
+                if let url = Bundle.main.url(forResource: plateName, withExtension: "png"),
+                   let plate = NSImage(contentsOf: url) {
+                    Image(nsImage: plate)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Canvas { context, size in
+                        drawPlate(context, size: size)
+                    }
+                    .padding(2)
+                }
             }
-            .padding(2)
-            VStack {
-                Spacer()
-                HStack {
-                    Text("AAF / TECHNICAL ORDER")
-                        .font(.system(size:9,weight:.bold,design:.monospaced))
-                        .foregroundColor(ink.opacity(0.68))
-                    Spacer()
-                    Text("NOT TO SCALE   •   ARCHIVAL PLATE")
-                        .font(.system(size:9,weight:.medium,design:.monospaced))
-                        .foregroundColor(ink.opacity(0.68))
-                }.padding(.horizontal,14).padding(.bottom,6)
-            }
-            FighterIllustration(fighter:fighter)
-                .frame(width:85,height:65)
-                .saturation(0)
-                .opacity(0.85)
-                .background(Color(red:0.77,green:0.69,blue:0.53).opacity(0.92),
-                            in:RoundedRectangle(cornerRadius:3))
-                .overlay(RoundedRectangle(cornerRadius:3)
-                         .stroke(ink.opacity(0.56),lineWidth:0.7))
-                .padding(10)
+
         }
-        .frame(height:250)
+        .aspectRatio(1.56, contentMode: .fit)
+        .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius:5))
         .overlay(RoundedRectangle(cornerRadius:5).stroke(ink.opacity(0.48),lineWidth:1))
     }
@@ -632,137 +632,159 @@ private struct AcesPilotRecordSheet: View {
         .defaultSize(width:1250,height:820)
     }
     private var hangarCatalog: some View {
-                    ScrollView {
-                        VStack(alignment:.leading,spacing:22) {
-                            HStack {
-                                VStack(alignment:.leading,spacing:5) {
-                                    Text("FUN CITY  /  VECTOR SERIES  /  HANGAR")
-                                        .font(.system(size:11,weight:.bold,design:.monospaced))
-                                        .tracking(2).foregroundStyle(AcesStyle.ice)
-                                    Text("VECTOR ACES")
-                                        .font(.system(size:42,weight:.black,design:.rounded))
-                                    Text("WORLD WAR II  •  AIRCRAFT CATALOG")
-                                        .font(.system(size:12,weight:.medium,design:.monospaced))
-                                        .tracking(3).foregroundStyle(AcesStyle.amber)
-                                }
-                                Spacer()
-                                Button("PILOT RECORD") { showingPilotRecord = true }
-                                    .buttonStyle(.bordered).tint(AcesStyle.amber)
-                                Button("CUSTOM SETTINGS") { showingSettings = true }
-                                    .buttonStyle(.bordered).tint(AcesStyle.ice)
-                            }
-                            HStack(alignment:.top,spacing:18) {
-                                hangarAircraftPicker
-                                hangarAircraftDetails
-                            }
+        GeometryReader { viewport in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("FUN CITY  /  VECTOR SERIES  /  HANGAR")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .tracking(2).foregroundStyle(AcesStyle.ice)
+                            Text("VECTOR ACES")
+                                .font(.system(size: 38, weight: .black, design: .rounded))
+                            Text("WORLD WAR II  •  AIRCRAFT CATALOG")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .tracking(2).foregroundStyle(AcesStyle.amber)
                         }
-                        .padding(25)
-                        .frame(maxWidth:1280)
-                        .frame(maxWidth:.infinity)
+                        Spacer(minLength: 6)
+                        Button("PILOT RECORD") { showingPilotRecord = true }
+                            .buttonStyle(.bordered).tint(AcesStyle.amber)
+                        Button("CUSTOM SETTINGS") { showingSettings = true }
+                            .buttonStyle(.bordered).tint(AcesStyle.ice)
                     }
+                    HStack(alignment: .top, spacing: 16) {
+                        hangarAircraftPicker(availableHeight: max(410, viewport.size.height - 150))
+                        hangarAircraftDetails
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 1280)
+                .frame(maxWidth: .infinity)
+            }
+        }
     }
-    private var hangarAircraftPicker: some View {
-                                VStack(alignment:.leading,spacing:13) {
-                                    Text("MISSION TYPE")
-                                        .font(.system(size:11,weight:.bold,design:.monospaced))
-                                        .foregroundStyle(AcesStyle.ice)
-                                    Picker("Mission type",selection:$playMode) {
-                                        Text("Campaign").tag(AcesPlayMode.interception.rawValue)
-                                        Text("Endless Dogfight").tag(AcesPlayMode.endless.rawValue)
-                                    }
-                                    .labelsHidden().pickerStyle(.segmented)
-                                    Text(playMode == AcesPlayMode.interception.rawValue
-                                         ? "CAMPAIGN • \((AcesCampaignMission(rawValue:selectedMission) ?? .stukas).title)"
-                                         : "FREE FLIGHT • ENDLESS FORMATIONS")
-                                        .font(.system(size:10,weight:.medium,design:.monospaced))
-                                        .foregroundStyle(AcesStyle.amber)
-                                        .fixedSize(horizontal:false,vertical:true)
-                                    if playMode == AcesPlayMode.interception.rawValue {
-                                        VStack(alignment:.leading,spacing:5) {
-                                            Text("CAMPAIGN MISSIONS").font(.system(size:10,weight:.bold,design:.monospaced))
-                                                .foregroundStyle(AcesStyle.ice)
-                                            ForEach(AcesCampaignMission.allCases) { mission in
-                                                Button {
-                                                    selectedMission = mission.rawValue
-                                                    CombatAudio.shared.play(.menu,volume:0.15)
-                                                } label: {
-                                                    HStack {
-                                                        Text(String(format:"%02d",mission.rawValue))
-                                                        Text(mission.title)
-                                                        Spacer()
-                                                        if AcesPilotLog.unlocked < mission.rawValue {
-                                                            Image(systemName:"lock.fill")
-                                                        } else if AcesPilotLog.stars(for:mission)>0 {
-                                                            Text(String(repeating:"★",count:AcesPilotLog.stars(for:mission)))
-                                                        }
-                                                    }
-                                                    .font(.system(size:10,weight:.bold,design:.monospaced))
-                                                    .foregroundStyle(selectedMission == mission.rawValue ? AcesStyle.amber : .white.opacity(0.7))
-                                                    .padding(.vertical,6)
-                                                }
-                                                .disabled(AcesPilotLog.unlocked < mission.rawValue)
-                                                .buttonStyle(.plain)
-                                            }
-                                            Text((AcesCampaignMission(rawValue:selectedMission) ?? .stukas).overview)
-                                                .font(.system(size:10,design:.monospaced))
-                                                .foregroundStyle(.white.opacity(0.66))
-                                                .fixedSize(horizontal:false,vertical:true)
-                                            Text("PILOT: \(AcesPilotLog.rank)  •  SORTIES \(UserDefaults.standard.integer(forKey:"aces.campaign.sorties"))")
-                                                .font(.system(size:10,weight:.bold,design:.monospaced))
-                                                .foregroundStyle(AcesStyle.ice)
+
+    // The launch action is pinned to the bottom of the hangar sidebar.
+    // Mission/aircraft lists scroll independently on smaller Mac windows.
+    private func hangarAircraftPicker(availableHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MISSION TYPE")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(AcesStyle.ice)
+                    Picker("Mission type", selection: $playMode) {
+                        Text("Campaign").tag(AcesPlayMode.interception.rawValue)
+                        Text("Endless Dogfight").tag(AcesPlayMode.endless.rawValue)
+                    }
+                    .labelsHidden().pickerStyle(.segmented)
+                    Text(playMode == AcesPlayMode.interception.rawValue
+                        ? "CAMPAIGN • ((AcesCampaignMission(rawValue:selectedMission) ?? .stukas).title)"
+                        : "FREE FLIGHT • ENDLESS FORMATIONS")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(AcesStyle.amber)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if playMode == AcesPlayMode.interception.rawValue {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("CAMPAIGN MISSIONS")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(AcesStyle.ice)
+                            ForEach(AcesCampaignMission.allCases) { mission in
+                                Button {
+                                    selectedMission = mission.rawValue
+                                    CombatAudio.shared.play(.menu, volume: 0.15)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text(String(format: "%02d", mission.rawValue))
+                                        Text(mission.title)
+                                        Spacer(minLength: 2)
+                                        if AcesPilotLog.unlocked < mission.rawValue {
+                                            Image(systemName: "lock.fill")
+                                        } else if AcesPilotLog.stars(for: mission) > 0 {
+                                            Text(String(repeating: "★", count: AcesPilotLog.stars(for: mission)))
                                         }
                                     }
-                                    Text("SELECT AIRCRAFT").font(.system(size:12,weight:.bold,design:.monospaced))
-                                        .tracking(2).foregroundStyle(AcesStyle.ice)
-                                    ForEach(Fighter.allCases) { choice in
-                                        Button {
-                                            selectedFighter = choice.rawValue
-                                            CombatAudio.shared.play(.menu,volume:0.16)
-                                        } label: {
-                                            VStack(alignment:.leading,spacing:7) {
-                                                HStack {
-                                                    Text(choice.rawValue.uppercased())
-                                                        .font(.system(size:15,weight:.bold,design:.monospaced))
-                                                    Spacer()
-                                                    if choice == fighter { Image(systemName:"checkmark.circle.fill") }
-                                                }
-                                                Text(choice.role).font(.system(size:9,design:.monospaced))
-                                                    .foregroundStyle(.white.opacity(0.58))
-                                            }
-                                            .padding(15)
-                                            .frame(maxWidth:.infinity,alignment:.leading)
-                                            .background(choice == fighter ? AcesStyle.ice.opacity(0.19) : .white.opacity(0.055),
-                                                        in:RoundedRectangle(cornerRadius:8))
-                                            .overlay(RoundedRectangle(cornerRadius:8).stroke(choice == fighter ? AcesStyle.ice : .white.opacity(0.08)))
-                                        }.buttonStyle(.plain)
-                                    }
-                                    Spacer(minLength:12)
-                                    if hasSave && playMode == AcesPlayMode.endless.rawValue {
-                                        Button("RESUME SORTIE") {
-                                            UserDefaults.standard.set(true, forKey: "aces.resumeRequested")
-                                            started = true
-                                        }
-                                        .font(.system(size:13,weight:.bold,design:.monospaced))
-                                        .frame(maxWidth:.infinity).padding(12)
-                                        .background(AcesStyle.ice.opacity(0.22),in:RoundedRectangle(cornerRadius:8))
-                                    }
-                                    Button(playMode == AcesPlayMode.interception.rawValue ? "MISSION BRIEFING" : "START NEW SORTIE") {
-                                        CombatAudio.shared.play(.menu,volume:0.18)
-                                        UserDefaults.standard.set(false, forKey: "aces.resumeRequested")
-                                        started = true
-                                    }
-                                        .font(.system(size:17,weight:.black,design:.monospaced))
-                                        .frame(maxWidth:.infinity).padding(14)
-                                        .background(AcesStyle.amber,in:RoundedRectangle(cornerRadius:8))
-                                        .foregroundStyle(.black)
-                                    Text("← → TURN  •  ↑ ↓ SPEED  •  Q/E ALTITUDE\nSPACE FIRE  •  P PAUSE  •  RETURN RESTART")
-                                        .font(.system(size:10,design:.monospaced))
-                                        .foregroundStyle(.white.opacity(0.55))
-                                        .fixedSize(horizontal:false,vertical:true)
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(selectedMission == mission.rawValue ? AcesStyle.amber : .white.opacity(0.7))
+                                    .padding(.vertical, 4)
+                                    .contentShape(Rectangle())
                                 }
-                                .padding(18)
-                                .frame(width:330).frame(minHeight:570)
-                                .background(AcesStyle.panel,in:RoundedRectangle(cornerRadius:14))
+                                .disabled(AcesPilotLog.unlocked < mission.rawValue)
+                                .buttonStyle(.plain)
+                            }
+                            Text((AcesCampaignMission(rawValue: selectedMission) ?? .stukas).overview)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.66))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("PILOT: (AcesPilotLog.rank)  •  SORTIES (UserDefaults.standard.integer(forKey: "aces.campaign.sorties"))")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(AcesStyle.ice)
+                        }
+                    }
+                    Text("SELECT AIRCRAFT")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .tracking(1.5).foregroundStyle(AcesStyle.ice)
+                        .padding(.top, 4)
+                    ForEach(Fighter.allCases) { choice in
+                        Button {
+                            selectedFighter = choice.rawValue
+                            CombatAudio.shared.play(.menu, volume: 0.16)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack {
+                                    Text(choice.rawValue.uppercased())
+                                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                    Spacer(minLength: 2)
+                                    if choice == fighter { Image(systemName: "checkmark.circle.fill") }
+                                }
+                                Text(choice.role)
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.58))
+                            }
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 9)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(choice == fighter ? AcesStyle.ice.opacity(0.19) : .white.opacity(0.055),
+                                        in: RoundedRectangle(cornerRadius: 7))
+                            .overlay(RoundedRectangle(cornerRadius: 7)
+                                .stroke(choice == fighter ? AcesStyle.ice : .white.opacity(0.08)))
+                        }.buttonStyle(.plain)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.automatic)
+            Divider().overlay(AcesStyle.ice.opacity(0.15))
+                .padding(.vertical, 7)
+            if hasSave && playMode == AcesPlayMode.endless.rawValue {
+                Button("RESUME SORTIE") {
+                    UserDefaults.standard.set(true, forKey: "aces.resumeRequested")
+                    started = true
+                }
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .frame(maxWidth: .infinity).padding(9)
+                .background(AcesStyle.ice.opacity(0.22), in: RoundedRectangle(cornerRadius: 7))
+                .padding(.bottom, 6)
+            }
+            Button(playMode == AcesPlayMode.interception.rawValue ? "MISSION BRIEFING" : "START NEW SORTIE") {
+                CombatAudio.shared.play(.menu, volume: 0.18)
+                UserDefaults.standard.set(false, forKey: "aces.resumeRequested")
+                started = true
+            }
+            .font(.system(size: 13, weight: .black, design: .monospaced))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(AcesStyle.amber, in: RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(.black)
+            Text("← → TURN • ↑ ↓ SPEED • Q/E ALTITUDE\nSPACE FIRE • P PAUSE • RETURN RESTART")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.55))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 7)
+        }
+        .padding(13)
+        .frame(width: 300, height: availableHeight)
+        .background(AcesStyle.panel, in: RoundedRectangle(cornerRadius: 14))
     }
     private var hangarAircraftDetails: some View {
                                 VStack(alignment:.leading,spacing:12) {
