@@ -990,8 +990,10 @@ private final class AirBattleScene: SKScene {
     private let missionBackdrop = SKShapeNode()
     private let classifiedStamp = SKLabelNode(fontNamed:"AmericanTypewriter-Bold")
     private let briefingLetterhead = SKLabelNode(fontNamed:"AmericanTypewriter-Bold")
+    private let briefingSeal = SKShapeNode(circleOfRadius:30)
+    private let briefingSignature = SKLabelNode(fontNamed:"AmericanTypewriter-Bold")
     private var paperTexture: SKTexture?
-    private let missionCopy = (0..<6).map { _ in SKLabelNode(fontNamed:"Menlo") }
+    private let missionCopy = (0..<18).map { _ in SKLabelNode(fontNamed:"Menlo") }
     private var player = SKNode()
     private let playerArtwork = SKNode()
     private var keys = Set<UInt16>()
@@ -1978,7 +1980,7 @@ private final class AirBattleScene: SKScene {
     }
 
     private func makeBriefingPaper() -> SKTexture {
-        let w:CGFloat=1000, h:CGFloat=530
+        let w:CGFloat=850, h:CGFloat=1100
         let image=NSImage(size:NSSize(width:w,height:h),flipped:false) { _ in
             guard let ctx=NSGraphicsContext.current?.cgContext else { return false }
             let rect=CGRect(x:0,y:0,width:w,height:h)
@@ -2030,38 +2032,54 @@ private final class AirBattleScene: SKScene {
 
     private func configureMissionOverlay() {
         missionBackdrop.zPosition = 175
-        missionBackdrop.fillColor = SKColor(calibratedRed:0.018,green:0.038,blue:0.065,alpha:0.91)
-        missionBackdrop.strokeColor = .cyan.withAlphaComponent(0.46)
-        missionBackdrop.lineWidth = 1.3
+        missionBackdrop.fillColor = .white
+        missionBackdrop.strokeColor = SKColor(red:0.4,green:0.3,blue:0.16,alpha:0.9)
+        missionBackdrop.lineWidth = 1.2
         addChild(missionBackdrop)
-        paperTexture=makeBriefingPaper()
-        for (index,label) in missionCopy.enumerated() {
-            label.fontSize=index == 0 ? 21 : index == 5 ? 15 : 13
-            label.fontName=index == 0 || index == 5 ? "Menlo-Bold" : "Menlo"
-            label.fontColor=index == 0 ? .cyan : index == 5 ? .orange : .white
-            label.horizontalAlignmentMode = .center
+        paperTexture = makeBriefingPaper()
+        for label in missionCopy {
+            label.fontName = "AmericanTypewriter"
+            label.fontSize = 11
+            label.fontColor = SKColor(red:0.22,green:0.17,blue:0.12,alpha:1)
+            label.horizontalAlignmentMode = .left
             label.verticalAlignmentMode = .center
-            label.zPosition=177
+            label.zPosition = 177
             addChild(label)
         }
-        briefingLetterhead.text="U.S. ARMY AIR FORCES  /  OPERATION ORDER"
-        briefingLetterhead.fontSize=13
-        briefingLetterhead.fontColor=SKColor(red:0.27,green:0.19,blue:0.12,alpha:1)
-        briefingLetterhead.horizontalAlignmentMode = .left
-        briefingLetterhead.zPosition=178
-        briefingLetterhead.isHidden=true
+        briefingLetterhead.text = "HEADQUARTERS / ALLIED AIR OPERATIONS"
+        briefingLetterhead.fontSize = 14
+        briefingLetterhead.fontColor = SKColor(red:0.26,green:0.18,blue:0.11,alpha:1)
+        briefingLetterhead.horizontalAlignmentMode = .center
+        briefingLetterhead.zPosition = 179
         addChild(briefingLetterhead)
-        classifiedStamp.text="TOP SECRET"
-        classifiedStamp.fontSize=22
-        classifiedStamp.fontColor=SKColor(red:0.55,green:0.11,blue:0.09,alpha:0.78)
-        classifiedStamp.zRotation = -0.11
-        classifiedStamp.zPosition=179
-        classifiedStamp.isHidden=true
+        classifiedStamp.text = "SECRET"
+        classifiedStamp.fontSize = 24
+        classifiedStamp.fontColor = SKColor(red:0.61,green:0.13,blue:0.12,alpha:0.82)
+        classifiedStamp.zRotation = -0.10
+        classifiedStamp.zPosition = 179
         addChild(classifiedStamp)
 
+        briefingSeal.fillColor = .clear
+        briefingSeal.strokeColor = SKColor(red:0.27,green:0.20,blue:0.12,alpha:0.75)
+        briefingSeal.lineWidth = 2.5
+        briefingSeal.zPosition = 180
+        addChild(briefingSeal)
+        let sealText = SKLabelNode(fontNamed:"AmericanTypewriter-Bold")
+        sealText.text = "AAF\nOPS"
+        sealText.numberOfLines = 2
+        sealText.fontSize = 12
+        sealText.horizontalAlignmentMode = .center
+        sealText.fontColor = SKColor(red:0.31,green:0.23,blue:0.15,alpha:0.88)
+        sealText.verticalAlignmentMode = .center
+        briefingSeal.addChild(sealText)
+        briefingSignature.text = "/s/ GROUP OPERATIONS OFFICER"
+        briefingSignature.fontSize = 10
+        briefingSignature.fontColor = SKColor(red:0.25,green:0.20,blue:0.17,alpha:0.84)
+        briefingSignature.zPosition = 180
+        addChild(briefingSignature)
         missionText.fontSize=12
         missionText.fontColor = .orange
-        missionText.horizontalAlignmentMode = .left
+        missionText.horizontalAlignmentMode = .center
         missionText.zPosition=102
         addChild(missionText)
         layoutMissionOverlay()
@@ -2069,26 +2087,94 @@ private final class AirBattleScene: SKScene {
 
     private func layoutMissionOverlay() {
         guard playMode == .interception else { return }
-        let paper=missionStage == .briefing
-        let boxWidth=min(size.width-80,paper ? CGFloat(790) : CGFloat(720))
-        let boxHeight=min(size.height*0.83,paper ? CGFloat(420) : CGFloat(300))
-        let rect=CGRect(x:(size.width-boxWidth)*0.5,
-                        y:(size.height-boxHeight)*0.5,
-                        width:boxWidth,height:boxHeight)
-        missionBackdrop.path=CGPath(roundedRect:rect,
-            cornerWidth:paper ? 2 : 13,cornerHeight:paper ? 2 : 13,
+        let paper = missionStage == .briefing
+        // The briefing is a portrait US letter (8.5 x 11) document, scaled
+        // to the available height while leaving the instrument HUD outside.
+        let height = min(size.height * 0.94,CGFloat(676))
+        let paperWidth = height * 8.5 / 11.0
+        let width = paper ? paperWidth : min(size.width-80,CGFloat(720))
+        let boxHeight = paper ? height : min(size.height*0.83,CGFloat(300))
+        let rect = CGRect(x:(size.width-width)*0.5,y:(size.height-boxHeight)*0.5,
+                          width:width,height:boxHeight)
+        missionBackdrop.path = CGPath(roundedRect:rect,
+            cornerWidth:paper ? 1 : 12,cornerHeight:paper ? 1 : 12,
             transform:nil)
-        let lineStep=paper ? min(50,(boxHeight-100)/6) : 46
+        let left = rect.minX+36
+        let spacing = max(20,min(30,(boxHeight-136)/17))
         for (i,label) in missionCopy.enumerated() {
-            label.position=CGPoint(x:paper ? rect.minX+52 : rect.midX,
-                y:rect.maxY-(paper ? CGFloat(110):CGFloat(41)) -
-                  CGFloat(i)*lineStep)
-            label.horizontalAlignmentMode=paper ? .left : .center
+            label.position = CGPoint(
+                x:paper ? left : rect.midX,
+                y:rect.maxY - (paper ? 89 : 41) -
+                  CGFloat(i)*(paper ? spacing : 46))
+            label.horizontalAlignmentMode = paper ? .left : .center
         }
-        briefingLetterhead.position=CGPoint(x:rect.minX+52,y:rect.maxY-34)
-        classifiedStamp.position=CGPoint(x:rect.maxX-127,y:rect.maxY-51)
-        missionText.position=CGPoint(x:size.width/2,y:size.height-26)
-        missionText.horizontalAlignmentMode = .center
+        briefingLetterhead.position = CGPoint(x:rect.midX,y:rect.maxY-39)
+        classifiedStamp.position = CGPoint(x:rect.maxX-95,y:rect.maxY-69)
+        briefingSeal.position = CGPoint(x:rect.minX+70,y:rect.minY+48)
+        briefingSignature.position = CGPoint(x:rect.minX+125,y:rect.minY+55)
+        missionText.position = CGPoint(x:size.width/2,y:size.height-26)
+    }
+
+    private func briefingLines() -> [String] {
+        let mission = campaignMission
+        let header = String(format:"OPERATIONS ORDER NO. %02d  /  1944",mission.rawValue)
+        let title = "SUBJECT:  \(mission.title)"
+        let situation:String, friendly:String, instructions:String
+        let route:String, ingress:String, returnRoute:String, success:String
+        switch mission {
+        case .stukas:
+            situation = "ENEMY: SIX JU 87, FW 190 FIGHTER ESCORT."
+            friendly = "FRIENDLY: ALLIED FIELD DEFENCE / ONE FIGHTER."
+            instructions = "INTERCEPT DIVE BOMBERS BEFORE TARGET STRIKE."
+            route = "FIELD > EAST HOLD > INTERCEPT SECTOR"
+            ingress = "TRACK INBOUND FORMATIONS ON LONG-RANGE RADAR."
+            returnRoute = "RECOVER WEST TO PROTECTED AIRFIELD."
+            success = "DESTROY 4 OF 6; AIRFIELD MUST SURVIVE."
+        case .escort:
+            situation = "ENEMY: HOSTILE INTERCEPTOR SQUADRONS."
+            friendly = "FRIENDLY: THREE B-17 HEAVY BOMBERS."
+            instructions = "PROTECT FORMATION THROUGH ENEMY TERRITORY."
+            route = "ASSEMBLY > ESCORT LANE > SAFE CORRIDOR"
+            ingress = "ENGAGE FIGHTERS BEFORE BOMBER ATTACK RUNS."
+            returnRoute = "REJOIN FRIENDLY BOMBERS AT EXTRACTION."
+            success = "TWO OF THREE BOMBERS MUST SURVIVE."
+        case .ace:
+            situation = "ENEMY: ONE FW 190 ACE WITH TWO WINGMEN."
+            friendly = "FRIENDLY: SINGLE FIGHTER ON SWEEP DUTY."
+            instructions = "IDENTIFY, ENGAGE AND DEFEAT ENEMY ACE."
+            route = "RALLY > SEARCH BOX > INTERCEPT SECTOR"
+            ingress = "FOLLOW RADAR TO THE PRIORITY HOSTILE."
+            returnRoute = "DISENGAGE FOLLOWING CONFIRMED VICTORY."
+            success = "ACE DESTROYED BEFORE SEARCH WINDOW EXPIRES."
+        case .bridge:
+            situation = "ENEMY: EIGHT JU 87, FOUR ATTACK WAVES."
+            friendly = "FRIENDLY: STRATEGIC BRIDGE GARRISON."
+            instructions = "DENY ENEMY STRIKE ON RIVER CROSSING."
+            route = "STAGING > RIVER APPROACH > BRIDGE COVER"
+            ingress = "INTERCEPT BOMBERS EAST OF THE CROSSING."
+            returnRoute = "PATROL DEFENCE LINE UNTIL ALL WAVES PASS."
+            success = "DESTROY 5 OF 8; BRIDGE MUST SURVIVE."
+        }
+        return [
+            header,
+            title,
+            "CLASSIFICATION: SECRET / AIR OPERATIONS",
+            "1.  SITUATION",
+            "    \(situation)",
+            "    \(friendly)",
+            "2.  MISSION",
+            "    \(instructions)",
+            "    \(success)",
+            "3.  ROUTING / FLIGHT ORDERS",
+            "    \(route)",
+            "    \(ingress)",
+            "    \(returnRoute)",
+            "4.  EXECUTION",
+            "    AIRCRAFT: \(fighter.rawValue.uppercased())",
+            "    WEATHER: VARIABLE CLOUD / VISUAL CONTACT",
+            "    WINDOW: \(Int(mission.duration)) SEC.  USE Q/E FOR ALT.",
+            "PRESS RETURN TO LAUNCH"
+        ]
     }
 
     private func showMissionBriefing() {
@@ -2096,53 +2182,25 @@ private final class AirBattleScene: SKScene {
         missionBackdrop.isHidden = false
         missionBackdrop.fillTexture = paperTexture
         missionBackdrop.fillColor = .white
-        missionBackdrop.strokeColor = SKColor(red:0.40,green:0.27,blue:0.13,alpha:0.9)
-        classifiedStamp.isHidden = false
-        briefingLetterhead.isHidden = false
-        let lines: [String]
-        switch campaignMission {
-        case .stukas:
-            lines = ["MISSION 01  //  STOP THE STUKAS",
-                "SIX JU 87 DIVE BOMBERS APPROACH THE ALLIED AIRFIELD",
-                "FW 190 ESCORTS WILL TRY TO DRAW YOU AWAY",
-                "DESTROY AT LEAST FOUR BOMBERS BEFORE THEY STRIKE",
-                "AIRFIELD INTEGRITY 3  •  150 SECOND LIMIT",
-                "PRESS RETURN TO LAUNCH"]
-        case .escort:
-            lines = ["MISSION 02  //  BOMBER ESCORT",
-                "THREE ALLIED B-17S CROSS ENEMY AIRSPACE",
-                "PROTECT THE FORMATION FROM GERMAN INTERCEPTORS",
-                "KEEP AT LEAST TWO BOMBERS FLYING",
-                "95 SECOND ESCORT WINDOW",
-                "PRESS RETURN TO LAUNCH"]
-        case .ace:
-            lines = ["MISSION 03  //  HUNT THE ACE",
-                "A DEADLY FW 190 PILOT IS OPERATING NEARBY",
-                "THE ACE IS PROTECTED BY TWO WINGMEN",
-                "FIND AND DESTROY THE ACE BEFORE HE ESCAPES",
-                "125 SECOND INTERCEPTION WINDOW",
-                "PRESS RETURN TO LAUNCH"]
-        case .bridge:
-            lines = ["MISSION 04  //  DEFEND THE BRIDGE",
-                "EIGHT DIVE BOMBERS APPROACH A STRATEGIC BRIDGE",
-                "FOUR WAVES ARRIVE WITH ENEMY ESCORTS",
-                "DESTROY AT LEAST FIVE OF THE EIGHT BOMBERS",
-                "BRIDGE INTEGRITY 3  •  155 SECOND LIMIT",
-                "PRESS RETURN TO LAUNCH"]
-        }
-        for (index,item) in missionCopy.enumerated() {
-            item.text=lines[index]
-            item.isHidden=false
-            item.fontName=index == 0 || index == 5 ?
+        missionBackdrop.strokeColor = SKColor(red:0.41,green:0.31,blue:0.16,alpha:1)
+        classifiedStamp.isHidden=false
+        briefingLetterhead.isHidden=false
+        briefingSeal.isHidden=false
+        briefingSignature.isHidden=false
+        let lines = briefingLines()
+        for (i,item) in missionCopy.enumerated() {
+            item.text = lines[i]
+            item.isHidden = false
+            item.fontName = i == 0 || i == 1 || i == 17 ?
                 "AmericanTypewriter-Bold" : "AmericanTypewriter"
-            item.fontSize=index == 0 ? 20 : index == 5 ? 15 : 13
-            item.fontColor=index == 5 ?
-                SKColor(red:0.52,green:0.12,blue:0.08,alpha:1) :
-                SKColor(red:0.21,green:0.15,blue:0.10,alpha:1)
+            item.fontSize = i == 1 ? 14 : i == 17 ? 12 : 10.6
+            item.fontColor = i == 17 ?
+                SKColor(red:0.57,green:0.12,blue:0.10,alpha:1) :
+                SKColor(red:0.22,green:0.17,blue:0.12,alpha:1)
         }
         layoutMissionOverlay()
-        missionText.text = ""
-        status.text = ""
+        missionText.text=""
+        status.text=""
     }
 
     func startOrRetryMission() {
@@ -2174,6 +2232,8 @@ private final class AirBattleScene: SKScene {
         missionBackdrop.isHidden = true
         classifiedStamp.isHidden = true
         briefingLetterhead.isHidden = true
+        briefingSeal.isHidden = true
+        briefingSignature.isHidden = true
         missionCopy.forEach { $0.isHidden = true }
         missionTime = 0
         gameTime = 0
@@ -2524,9 +2584,11 @@ private final class AirBattleScene: SKScene {
         missionBackdrop.strokeColor = .cyan.withAlphaComponent(0.46)
         classifiedStamp.isHidden = true
         briefingLetterhead.isHidden = true
+        briefingSeal.isHidden = true
+        briefingSignature.isHidden = true
         for (index,label) in missionCopy.enumerated() {
-            label.text=lines[index]
-            label.isHidden=false
+            label.text=index < lines.count ? lines[index] : ""
+            label.isHidden=index >= lines.count
             label.fontName=index == 0 || index == 5 ? "Menlo-Bold" : "Menlo"
             label.fontSize=index == 0 ? 21 : index == 5 ? 15 : 13
             label.fontColor=index == 0 ? .cyan : index == 5 ? .orange : .white
