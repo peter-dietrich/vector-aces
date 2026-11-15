@@ -4275,8 +4275,6 @@ private final class RightCombatHUDNode: SKNode {
             radarContacts.addChild(blip)
             if let enemyHeading=contact.heading {
                 // Ground track line shows WHICH DIRECTION a squadron flies.
-                let relative=enemyHeading - v.radarSweep*0 + 0
-                _ = relative // Orientation is relative to player's heading below.
                 let trace=CGMutablePath()
                 trace.move(to:CGPoint(x:x,y:y))
                 let rel=enemyHeading // Precomputed player-relative bearing.
