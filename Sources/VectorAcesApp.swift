@@ -278,14 +278,7 @@ private struct FighterHangarHero: View {
     private let ink = Color(red:0.29,green:0.24,blue:0.17)
     private let faint = Color(red:0.54,green:0.43,blue:0.29)
 
-    var body: some View {
-        ZStack(alignment:.bottomTrailing) {
-            LinearGradient(colors:[
-                Color(red:0.88,green:0.83,blue:0.70),
-                Color(red:0.95,green:0.91,blue:0.79),
-                Color(red:0.80,green:0.73,blue:0.58)],
-                startPoint:.topLeading,endPoint:.bottomTrailing)
-            Canvas { context, size in
+    private func drawPlate(_ context: GraphicsContext, size: CGSize) {
                 let w=size.width, h=size.height
                 func line(_ from:CGPoint,_ to:CGPoint,weight:CGFloat=1,
                           alpha:Double=0.85) {
@@ -420,7 +413,9 @@ private struct FighterHangarHero: View {
                      CGPoint(x:x0+length*0.73,y:cy-42),alpha:0.65)
 
                 // FIG. 2: distinct planform and twin-boom construction.
-                let topX=w*0.26, topY:h-47, scale:CGFloat=0.32
+                let topX:CGFloat = w*0.26
+                let topY:CGFloat = h-47
+                let scale:CGFloat = 0.32
                 func p(_ x:CGFloat,_ y:CGFloat)->CGPoint {
                     CGPoint(x:topX+x*scale,y:topY+y*scale)
                 }
@@ -448,6 +443,17 @@ private struct FighterHangarHero: View {
                                    with:.color(ink),lineWidth:1.1)
                 }
                 label("FIG. 3  /  FRONT",w*0.57,h-13,font:9)
+    }
+
+    var body: some View {
+        ZStack(alignment:.bottomTrailing) {
+            LinearGradient(colors:[
+                Color(red:0.88,green:0.83,blue:0.70),
+                Color(red:0.95,green:0.91,blue:0.79),
+                Color(red:0.80,green:0.73,blue:0.58)],
+                startPoint:.topLeading,endPoint:.bottomTrailing)
+            Canvas { context,size in
+                drawPlate(context,size:size)
             }
             .padding(2)
             VStack {
