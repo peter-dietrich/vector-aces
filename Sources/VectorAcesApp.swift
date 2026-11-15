@@ -805,6 +805,7 @@ private final class AirBattleScene: SKScene {
         var altitude: CGFloat = 7600
         var climbVelocity: CGFloat = 0
         var sizeAtSpawn: CGFloat = 1
+        var bankVisual: CGFloat = 0
     }
     private struct Round {
         let sprite: SKShapeNode
@@ -1055,6 +1056,17 @@ private final class AirBattleScene: SKScene {
         wingPanel.fillColor = .black.withAlphaComponent(0.26)
         wingPanel.strokeColor = .clear
         node.addChild(wingPanel)
+        // Visible underside lip: turns reveal a colored wing edge that is
+        // hidden at level flight. Purely visual; hitboxes do not change.
+        let edge=SKShapeNode(rectOf:CGSize(width:span*1.85,height:8),cornerRadius:1)
+        edge.fillColor=kind == 2 ? SKColor(red:0.79,green:0.67,blue:0.39,alpha:0.96)
+                                 : SKColor(red:0.46,green:0.68,blue:0.77,alpha:0.92)
+        edge.strokeColor = .white.withAlphaComponent(0.4)
+        edge.position.y = -12
+        edge.name="bankUnderside"
+        edge.zPosition = -1
+        edge.alpha = 0
+        node.addChild(edge)
         let tail = SKShapeNode(rectOf: CGSize(width: isLightning ? 49 : 28, height: 5), cornerRadius: 1)
         tail.position.y = -29
         tail.fillColor = color.withAlphaComponent(0.94)
@@ -1131,6 +1143,22 @@ private final class AirBattleScene: SKScene {
             node.addChild(exhaust)
         }
         return node
+    }
+
+    // A strong, smooth top-down roll projection: foreshortened wings, exposed
+    // wing edges and fuselage lean. Keep world position, heading and collision
+    // geometry untouched; only the aircraft artwork changes.
+    private func applyBankProjection(_ art:SKNode, bank:CGFloat) {
+        let roll=max(-1,min(1,bank))
+        let amount=abs(roll)
+        art.xScale=1-amount*0.68
+        art.yScale=1+amount*0.18
+        art.zRotation=roll*0.24
+        art.position.x=roll*12
+        if let edge=art.childNode(withName:"bankUnderside") {
+            edge.alpha=amount*0.9
+            edge.position.x = -roll*12
+        }
     }
 
     private func drawAlliedB17() -> SKNode {
@@ -1639,10 +1667,16 @@ private final class AirBattleScene: SKScene {
         // The aircraft pivots into its bank and presents a foreshortened wing
         // profile rather than staying a rigid flat silhouette during turns.
         // Forward heading and muzzle geometry remain independent of banking.
-        playerArtwork.xScale = 1 - abs(bankAngle) * 0.27
-        playerArtwork.yScale = 1 + abs(bankAngle) * 0.055
-        playerArtwork.position.x = bankAngle * 8
-        playerArtwork.zRotation = -bankAngle * 0.12
+        // The player's bank is amplified into an unmistakable profile change.
+        // Scale is independent of plane rotation, speed, and hit detection.
+        let screenBank = bankAngle / 0.65
+        applyBankProjection(playerArtwork,bank:screenBank)
+        if let art=playerArtwork.children.first {
+            if let edge=art.childNode(withName:"bankUnderside") {
+                edge.alpha=min(1,abs(screenBank))*0.9
+                edge.position.x = -screenBank*12
+            }
+        }
         let velocity = CGVector(dx: cos(heading) * airspeed, dy: sin(heading) * airspeed)
         // Free flight with a generous camera dead-zone. The aircraft crosses the
         // screen naturally, and only then does the camera pan to follow it.
@@ -3155,10 +3189,10 @@ private final class AirBattleScene: SKScene {
         player.removeAllActions()
         if player.parent == nil { battlefield.addChild(player) }
         player.setScale(0.9 * 2.0)
-        playerArtwork.xScale = 1
-        playerArtwork.yScale = 1
-        playerArtwork.position.x = 0
-        playerArtwork.zRotation = 0
+        applyBankProjection(playerArtwork,bank:0)
+        if let edge=playerArtwork.children.first?.childNode(withName:"bankUnderside") {
+            edge.alpha=0
+        }
         player.alpha = 1
         ammo = fighter.ammunition
         altitude = 7600
