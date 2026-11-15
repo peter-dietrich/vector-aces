@@ -687,7 +687,7 @@ private struct AcesGameWindow: View {
                             Text("VECTOR ACES")
                                 .font(.system(size:19,weight:.black,design:.monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.15b")
+                            Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "DEV") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"))")
                                 .font(.system(size:10,weight:.medium,design:.monospaced))
                                 .foregroundStyle(.gray)
                         }
@@ -778,6 +778,7 @@ private struct GameSurface: NSViewRepresentable {
 }
 
 private final class AirBattleScene: SKScene {
+    private let simulationRate: CGFloat = 1.20  // Shared flight, AI, shot and cloud motion tempo.
     private enum Tactic { case formation, intercept, flank, attack, evade, breakAway, regroup }
     private enum CombatRole { case interceptor, hunter, escort, bomber }
     private struct Bandit {
@@ -889,7 +890,7 @@ private final class AirBattleScene: SKScene {
     private let telemetryLines = (0..<19).map { _ in SKLabelNode(fontNamed: "Menlo-Bold") }
     private let telemetryAccent = SKShapeNode()
     private let telemetryRules = (0..<3).map { _ in SKShapeNode() }
-    private let radarRange: CGFloat = 8500 // Mission-wide scope keeps incoming bomber flights visible.
+    private let radarRange: CGFloat = 12500 // Strategic early-warning scope; all mission formations in view.
     private let radarPanel = SKShapeNode()
     private let radarContacts = SKNode()
     private let radarLegend = SKLabelNode(fontNamed:"Menlo-Bold")
@@ -1589,7 +1590,8 @@ private final class AirBattleScene: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         if lastTime == 0 { lastTime = currentTime; return }
-        let dt = CGFloat(min(currentTime - lastTime, 0.04))
+        let wallDt = CGFloat(min(currentTime - lastTime, 0.04))
+        let dt = wallDt * simulationRate
         lastTime = currentTime
         if playMode == .interception && missionStage == .briefing {
             updateTerrainTiles()
@@ -1600,7 +1602,7 @@ private final class AirBattleScene: SKScene {
         gameTime += dt
         if playMode == .endless && Int(gameTime) % 12 == 0 && Int(gameTime - dt) % 12 != 0 { saveRun() }
         if playMode == .endless { wave = max(1, prefs.integer(forKey: "aces.startWave")) + Int(gameTime / 36) }
-        else { wave = 1; missionTime += dt }
+        else { wave = 1; missionTime += wallDt }
         let left = keys.contains(123) || keys.contains(0)
         let right = keys.contains(124) || keys.contains(2)
         let thrust = keys.contains(126) || keys.contains(13)
@@ -3132,9 +3134,9 @@ private final class AirBattleScene: SKScene {
     private func updateGraphicalHUD() {
         let snapshot=AcesFlightHUDValue(
             altitude:altitude,
-            verticalSpeed:climbRate,
-            speed:airspeed,
-            topSpeed:fighter.speed+(fighter == .thunderbolt ? 205 : 185),
+            verticalSpeed:climbRate * simulationRate,
+            speed:airspeed * simulationRate,
+            topSpeed:(fighter.speed+(fighter == .thunderbolt ? 205 : 185))*simulationRate,
             energy:flightEnergy,
             bank:bankAngle,
             health:health,
