@@ -1616,10 +1616,19 @@ private final class AirBattleScene: SKScene {
                     (node as! SKSpriteNode).size : CGSize(width:450,height:220)
                 if !cloudAllowed(node.position,size:footprint,
                                  safeZones:cloudSafetyZones()) {
-                    node.position=CGPoint(x:player.position.x -
-                           worldWidth*0.40 + CGFloat.random(in:0...worldWidth*0.15),
-                           y:player.position.y +
-                           CGFloat.random(in:-worldHeight*0.4...worldHeight*0.4))
+                    // Retire that cloud toward a safe portion of the wider
+                    // view; never use a single unchecked random relocation.
+                    for _ in 0..<70 {
+                        let candidate=CGPoint(x:player.position.x +
+                            CGFloat.random(in:-worldWidth*0.48...worldWidth*0.48),
+                            y:player.position.y +
+                            CGFloat.random(in:-worldHeight*0.48...worldHeight*0.48))
+                        if cloudAllowed(candidate,size:footprint,
+                                        safeZones:cloudSafetyZones()) {
+                            node.position=candidate
+                            break
+                        }
+                    }
                 }
             }
         }
@@ -1832,6 +1841,7 @@ private final class AirBattleScene: SKScene {
         escortWaveIndex = 0
         clearMissionAllies()
         if campaignMission == .escort { spawnAlliedBombers() }
+        regenerateCloudField()
         // First bomber flight is available to the radar immediately upon launch.
         if campaignMission == .stukas || campaignMission == .bridge {
             spawnMissionBomberPair()
