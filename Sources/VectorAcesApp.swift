@@ -3367,16 +3367,22 @@ private final class AirBattleScene: SKScene {
         var contacts:[AcesRadarContact]=[]
         contacts.reserveCapacity(bandits.count+allies.count+1)
         func addContact(_ position:CGPoint, bomber:Bool=false,
-                        ally:Bool=false, ace:Bool=false, objective:Bool=false) {
+                        ally:Bool=false, ace:Bool=false, objective:Bool=false,
+                        enemyHeading:CGFloat?=nil, flightID:Int=0,
+                        priority:Bool=false,pending:Bool=false) {
             let dx=position.x-player.position.x
             let dy=position.y-player.position.y
             let lateral=sin(heading)*dx-cos(heading)*dy
             let forward=cos(heading)*dx+sin(heading)*dy
             contacts.append(AcesRadarContact(lateral:lateral,forward:forward,
-                            bomber:bomber,ally:ally,ace:ace,objective:objective))
+                            bomber:bomber,ally:ally,ace:ace,objective:objective,
+                            heading:enemyHeading.map{$0-heading},flightID:flightID,
+                            priority:priority,pending:pending))
         }
         for b in bandits {
-            addContact(b.position,bomber:b.kind==2,ace:b.isAce)
+            addContact(b.position,bomber:b.kind==2,ace:b.isAce,
+                       enemyHeading:b.heading,flightID:b.flightID,
+                       priority:b.missionBomber)
         }
         if playMode == .interception {
             if campaignMission == .escort {
@@ -3394,6 +3400,36 @@ private final class AirBattleScene: SKScene {
             atan2(sin(atan2(dy,dx)-heading),cos(atan2(dy,dx)-heading))
         }
         let altitudeDelta=nearest.map{$0.altitude-altitude}
+        let clock=nearest.map { _ -> Int in
+            let relative=atan2(sin(atan2(dy,dx)-heading),
+                               cos(atan2(dy,dx)-heading))
+            let index=Int((12-relative*6 / .pi).rounded())
+            let number=((index % 12)+12)%12
+            return number == 0 ? 12 : number
+        }
+        let incomingFlightCount=Set(missionBombers.map{$0.flightID}).count
+        let strikeETA:CGFloat?=defensiveMission ? missionBombers.map {
+            hypot($0.position.x-airfield.position.x,
+                  $0.position.y-airfield.position.y) /
+                  max(1,$0.speed*simulationRate)
+        }.min() : nil
+        var nextWaveETA:CGFloat?=nil
+        if defensiveMission {
+            let schedule:[CGFloat]=campaignMission == .stukas ?
+                [0,30,58] : [0,24,46,68]
+            let nextIndex=bomberLaunched/2
+            if nextIndex < schedule.count {
+                nextWaveETA=max(0,schedule[nextIndex]-missionTime)
+                // Predicted distant groups appear at the radar edge up to
+                // 25 seconds before the next physical spawn.
+                if let remaining=nextWaveETA,remaining <= 25 {
+                    addContact(CGPoint(x:airfield.position.x+5500,
+                                      y:airfield.position.y+CGFloat(nextIndex-1)*230),
+                               bomber:true,flightID:1000+nextIndex,
+                               priority:true,pending:true)
+                }
+            }
+        }
         let rear=bandits.contains { b in
             let x=b.position.x-player.position.x
             let y=b.position.y-player.position.y
@@ -3443,6 +3479,9 @@ private final class AirBattleScene: SKScene {
             targetAltitudeDelta:altitudeDelta,
             targetClosing:nearest.map{$0.previousDistance > hypot(dx,dy)} ?? false,
             targetIsAce:nearest?.isAce ?? false,
+            targetClock:clock,inboundFlights:incomingFlightCount,
+            incomingBombers:missionBombers.count,
+            strikeETA:strikeETA,nextWaveETA:nextWaveETA,
             contacts:contacts,radarRange:radarRange,radarSweep:radarSweep,
             rearThreat:rear,missionTitle:missionTitle,missionDone:done,
             missionTotal:total,objectiveHealth:objectiveHealth,
@@ -3841,6 +3880,10 @@ private struct AcesRadarContact {
     let ally:Bool
     let ace:Bool
     let objective:Bool
+    let heading:CGFloat?
+    let flightID:Int
+    let priority:Bool
+    let pending:Bool
 }
 
 private struct AcesCombatHUDValue {
@@ -3856,6 +3899,11 @@ private struct AcesCombatHUDValue {
     let targetAltitudeDelta:CGFloat?
     let targetClosing:Bool
     let targetIsAce:Bool
+    let targetClock:Int?
+    let inboundFlights:Int
+    let incomingBombers:Int
+    let strikeETA:CGFloat?
+    let nextWaveETA:CGFloat?
     let contacts:[AcesRadarContact]
     let radarRange:CGFloat
     let radarSweep:CGFloat
@@ -3893,6 +3941,8 @@ private final class RightCombatHUDNode: SKNode {
     private let sweep=SKNode()
     private let radarContacts=SKNode()
     private let radarLabel=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let radarStatus=SKLabelNode(fontNamed:"Menlo-Bold")
+    private let radarETA=SKLabelNode(fontNamed:"Menlo-Bold")
     private var lastRadarUpdate:CGFloat = -100
 
     override init() {
@@ -3930,7 +3980,7 @@ private final class RightCombatHUDNode: SKNode {
                            color:AcesHUDVisual.amber,parent:self)
         AcesHUDVisual.text("MISSION / OBJECTIVE",at:CGPoint(x:14,y:-340),
                            color:AcesHUDVisual.amber,parent:self)
-        AcesHUDVisual.text("RADAR / LONG RANGE",at:CGPoint(x:14,y:-475),
+        AcesHUDVisual.text("RADAR / EARLY WARNING",at:CGPoint(x:14,y:-475),
                            color:AcesHUDVisual.amber,parent:self)
         scoreCaption.text="SCORE"
         scoreCaption.position=CGPoint(x:15,y:-46)
@@ -4089,8 +4139,22 @@ private final class RightCombatHUDNode: SKNode {
         radarLabel.fontSize=10
         radarLabel.fontColor=AcesHUDVisual.muted
         radarLabel.horizontalAlignmentMode = .right
-        radarLabel.text="8,500 UNITS"
+        radarLabel.text="12,500 UNITS"
         addChild(radarLabel)
+        radarStatus.position=CGPoint(x:14,y:-494)
+        radarStatus.fontSize=9
+        radarStatus.fontColor=AcesHUDVisual.amber
+        addChild(radarStatus)
+        radarETA.position=CGPoint(x:14,y:-665)
+        radarETA.fontSize=9
+        radarETA.fontColor=AcesHUDVisual.amber
+        addChild(radarETA)
+        // Range marks make the scope useful for judging intercept time.
+        for (i,range) in ["4K","8K","12K"].enumerated() {
+            AcesHUDVisual.text(range,
+                at:CGPoint(x:125+CGFloat(i+1)*23,y:-571),
+                size:7,color:AcesHUDVisual.muted.withAlphaComponent(0.55),parent:self)
+        }
     }
 
     func layout(in sceneSize:CGSize) {
@@ -4110,7 +4174,19 @@ private final class RightCombatHUDNode: SKNode {
         if v.rearThreat {
             threatRing.alpha=0.35+0.65*(0.5+0.5*sin(time*9))
         }
-        targetInfo.text=v.targetRange.map { "TARGET  \(Int($0))" } ?? "SCANNING"
+        if let clock=v.targetClock,let range=v.targetRange {
+            targetInfo.text=String(format:"BANDIT %02d:00  %04d",clock,Int(range))
+        } else {
+            targetInfo.text="NO CONFIRMED CONTACT"
+        }
+        radarStatus.text=v.inboundFlights > 0 ?
+            "\(v.inboundFlights) FLIGHT(S) / \(v.incomingBombers) BOMBERS" :
+            (v.nextWaveETA != nil ? "CONTACTS EXPECTED" : "SEARCH / SWEEP")
+        if let eta=v.strikeETA {
+            radarETA.text="STRIKE  T-\(Int(max(0,eta)))s"
+        } else if let next=v.nextWaveETA {
+            radarETA.text="NEXT FLIGHT T-\(Int(max(0,next)))s"
+        } else { radarETA.text="SCANNING" }
         if let delta=v.targetAltitudeDelta {
             let alt=String(format:"%+.0f",delta)
             targetDelta.text="Δ \(alt) FT"
@@ -4152,7 +4228,8 @@ private final class RightCombatHUDNode: SKNode {
         for contact in v.contacts.prefix(65) {
             let range=hypot(contact.lateral,contact.forward)
             let normalized=min(1,range / v.radarRange)
-            let radial=88 * pow(normalized,0.68)
+            // More radial separation at 12.5K range keeps nearby targets distinct.
+            let radial=86 * pow(normalized,0.53)
             let x=range>0 ? contact.lateral/range*radial : 0
             let y=range>0 ? contact.forward/range*radial : 0
             let color:SKColor = contact.objective ? .green :
@@ -4161,13 +4238,24 @@ private final class RightCombatHUDNode: SKNode {
                 contact.bomber ? AcesHUDVisual.amber : AcesHUDVisual.red
             let blip:SKShapeNode
             if contact.objective {
-                blip=SKShapeNode(rectOf:CGSize(width:7,height:7))
+                blip=SKShapeNode(rectOf:CGSize(width:8,height:8))
+            } else if contact.bomber || contact.pending {
+                // Bombers and predicted inbound flights are triangular
+                // mission-priority symbols, not generic dots.
+                let p=CGMutablePath()
+                p.move(to:CGPoint(x:0,y:7))
+                p.addLine(to:CGPoint(x:-5,y:-4))
+                p.addLine(to:CGPoint(x:5,y:-4))
+                p.closeSubpath()
+                blip=SKShapeNode(path:p)
+                blip.lineWidth=1.2
             } else {
-                blip=SKShapeNode(circleOfRadius:(contact.bomber || contact.ally ? 3.9 : 3.0)*(1-0.3*normalized))
+                blip=SKShapeNode(circleOfRadius:contact.ace ? 4.1 : 3.1)
             }
             blip.position=CGPoint(x:x,y:y)
             blip.fillColor=color
-            blip.strokeColor = .clear
+            blip.strokeColor = contact.pending ? AcesHUDVisual.amber : .clear
+            if contact.pending { blip.fillColor = .clear }
             blip.glowWidth=contact.ace || contact.bomber ? 3.5 : 1.5
             let angle=atan2(x,y)
             let diff=(v.radarSweep-angle).truncatingRemainder(dividingBy:2 * .pi)
@@ -4175,8 +4263,31 @@ private final class RightCombatHUDNode: SKNode {
             // Active mission contacts must remain on radar even when the
             // cosmetic sweep has passed them; sweep only modulates brightness.
             let baseline:CGFloat = contact.bomber ? 0.82 : contact.ally ? 0.68 : 0.50
-            blip.alpha = baseline + (1-baseline)*exp(-lag*0.45)
+            blip.alpha = contact.pending ?
+                0.53+0.38*(0.5+0.5*sin(time*4)) :
+                baseline + (1-baseline)*exp(-lag*0.45)
             radarContacts.addChild(blip)
+            if let enemyHeading=contact.heading {
+                // Ground track line shows WHICH DIRECTION a squadron flies.
+                let relative=enemyHeading - v.radarSweep*0 + 0
+                _ = relative // Orientation is relative to player's heading below.
+                let trace=CGMutablePath()
+                trace.move(to:CGPoint(x:x,y:y))
+                let rel=enemyHeading // Precomputed player-relative bearing.
+                trace.addLine(to:CGPoint(x:x-sin(rel)*14,y:y+cos(rel)*14))
+                let track=SKShapeNode(path:trace)
+                track.strokeColor=color.withAlphaComponent(0.62)
+                track.lineWidth=1.4
+                radarContacts.addChild(track)
+            }
+            if contact.priority && contact.flightID != 0 {
+                let ring=SKShapeNode(circleOfRadius:9.5)
+                ring.position=CGPoint(x:x,y:y)
+                ring.strokeColor=AcesHUDVisual.amber.withAlphaComponent(0.43)
+                ring.fillColor = .clear
+                ring.lineWidth=1
+                radarContacts.addChild(ring)
+            }
         }
     }
 }
