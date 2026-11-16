@@ -642,7 +642,7 @@ private struct AcesPilotRecordSheet: View {
                             .font(.system(size: 38, weight: .black, design: .rounded))
                         HStack(spacing: 12) {
                             Text("WORLD WAR II  •  AIRCRAFT CATALOG")
-                            Text("BUILD 2026.11.15 (9) • ARCHIVE PLATES")
+                            Text("BUILD 2026.11.15 (10) • AIRCRAFT / AAR")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(AcesStyle.ice.opacity(0.75))
                         }
@@ -2179,7 +2179,7 @@ private final class AirBattleScene: SKScene {
 
     private func layoutMissionOverlay() {
         guard playMode == .interception else { return }
-        let paper = missionStage == .briefing
+        let paper = missionStage != .active
         // The briefing is a portrait US letter (8.5 x 11) document, scaled
         // to the available height while leaving the instrument HUD outside.
         let height = min(size.height * 0.94,CGFloat(676))
@@ -2692,32 +2692,50 @@ private final class AirBattleScene: SKScene {
         let next = AcesCampaignMission(rawValue:campaignMission.rawValue+1)
         let advancement = success && next != nil && next!.rawValue <= AcesPilotLog.unlocked
         let footer = advancement ?
-            "PRESS RETURN  /  NEXT: \(next!.title)" :
-            success ? "CAMPAIGN COMPLETE  /  RETURN TO REPLAY" :
-                      "PRESS RETURN  /  RETRY MISSION"
+            "RETURN  /  NEXT: \(next!.title)" :
+            success ? "RETURN  /  CAMPAIGN COMPLETE" :
+                      "RETURN  /  RETRY MISSION"
         let lines = [
-            success ? "MISSION COMPLETE  //  VICTORY" : "MISSION FAILED  //  RETREAT",
-            reason,
-            "MISSION \(campaignMission.rawValue)  /  \(campaignMission.title)",
-            "HOSTILES DOWN \(max(0,kills-campaignKillsAtStart))  /  DAMAGE TAKEN \(missionHitsTaken)",
-            "TOTAL SCORE  \(score)  /  RANK  \(AcesPilotLog.rank)",
+            String(format:"AFTER-ACTION REPORT  /  OP. %02d",campaignMission.rawValue),
+            success ? "MISSION ACCOMPLISHED" : "MISSION NOT ACCOMPLISHED",
+            "CLASSIFICATION: SECRET / AIR OPERATIONS",
+            "1.  OPERATIONS SUMMARY",
+            "    \(campaignMission.title.uppercased())",
+            "    \(reason.uppercased())",
+            "2.  COMBAT RESULTS",
+            "    HOSTILE AIRCRAFT DESTROYED: \(max(0,kills-campaignKillsAtStart))",
+            "    HITS SUSTAINED: \(missionHitsTaken)",
+            "3.  PILOT RECORD",
+            "    TOTAL SCORE: \(score)",
+            "    CURRENT RANK: \(AcesPilotLog.rank)",
+            "    MISSION STARS: \(stars)",
+            "4.  COMMAND DISPOSITION",
+            "    \(success ? "MISSION CREDIT CONFIRMED." : "AIRCRAFT LOST / RETRY AUTHORIZED.")",
+            "    \(success ? "AWARDS AND RECORD UPDATED." : "REPORT FILED WITH OPERATIONS.")",
+            "    AIRCRAFT: \(fighter.rawValue.uppercased())",
             footer
         ]
         missionBackdrop.isHidden = false
-        missionBackdrop.fillTexture = nil
-        missionBackdrop.fillColor = SKColor(calibratedRed:0.018,green:0.038,
-                                            blue:0.065,alpha:0.94)
-        missionBackdrop.strokeColor = .cyan.withAlphaComponent(0.46)
-        classifiedStamp.isHidden = true
-        briefingLetterhead.isHidden = true
-        briefingSeal.isHidden = true
-        briefingSignature.isHidden = true
+        missionBackdrop.fillTexture = paperTexture
+        missionBackdrop.fillColor = .white
+        missionBackdrop.strokeColor = SKColor(red:0.41,green:0.31,blue:0.16,alpha:1)
+        classifiedStamp.text = success ? "APPROVED" : "FAILED"
+        classifiedStamp.fontColor = success ?
+            SKColor(red:0.21,green:0.42,blue:0.25,alpha:0.82) :
+            SKColor(red:0.65,green:0.16,blue:0.12,alpha:0.84)
+        classifiedStamp.isHidden = false
+        briefingLetterhead.isHidden = false
+        briefingSeal.isHidden = false
+        briefingSignature.isHidden = false
         for (index,label) in missionCopy.enumerated() {
-            label.text=index < lines.count ? lines[index] : ""
-            label.isHidden=index >= lines.count
-            label.fontName=index == 0 || index == 5 ? "Menlo-Bold" : "Menlo"
-            label.fontSize=index == 0 ? 21 : index == 5 ? 15 : 13
-            label.fontColor=index == 0 ? .cyan : index == 5 ? .orange : .white
+            label.text=lines[index]
+            label.isHidden=false
+            let heading=[0,1,3,6,9,13,17].contains(index)
+            label.fontName=heading ? "AmericanTypewriter-Bold" : "AmericanTypewriter"
+            label.fontSize=index == 1 ? 14 : index == 17 ? 10.5 : heading ? 11.3 : 10.2
+            label.fontColor=index == 17 ?
+                SKColor(red:0.56,green:0.14,blue:0.12,alpha:1) :
+                SKColor(red:0.22,green:0.17,blue:0.12,alpha:1)
         }
         layoutMissionOverlay()
         missionText.text = ""
@@ -4363,6 +4381,28 @@ private final class RightCombatHUDNode: SKNode {
                            color:AcesHUDVisual.ice,parent:self,align:.center)
         AcesHUDVisual.text("E",at:CGPoint(x:203,y:-555),size:9,
                            color:AcesHUDVisual.ice,parent:self,align:.center)
+        // Degree scale is north-up, matching the N/E/S/W lettering.
+        // Cardinal numbers are inset to avoid the card titles and radar footer.
+        for degrees in stride(from:0,to:360,by:15) {
+            let angle=CGFloat(degrees) * .pi / 180
+            let dx=sin(angle), dy=cos(angle)
+            let major=degrees % 45 == 0
+            let inner:CGFloat=major ? 74 : 79
+            let outer:CGFloat=85
+            addChild(AcesHUDVisual.line(
+                CGPoint(x:radarCenter.x+dx*inner,y:radarCenter.y+dy*inner),
+                CGPoint(x:radarCenter.x+dx*outer,y:radarCenter.y+dy*outer),
+                color:AcesHUDVisual.ice.withAlphaComponent(major ? 0.65 : 0.32),
+                width:major ? 1.3 : 0.65))
+        }
+        for (degrees,printed) in [(45,"045"),(135,"135"),(225,"225"),(315,"315")] {
+            let angle=CGFloat(degrees) * .pi / 180
+            let radius:CGFloat=69
+            AcesHUDVisual.text(printed,
+                at:CGPoint(x:radarCenter.x+sin(angle)*radius,
+                           y:radarCenter.y+cos(angle)*radius),
+                size:6.8,color:AcesHUDVisual.muted,parent:self,align:.center)
+        }
         for fraction in [CGFloat(0.33),0.66,1.0] {
             let ring=SKShapeNode(circleOfRadius:88*fraction)
             ring.position=radarCenter
