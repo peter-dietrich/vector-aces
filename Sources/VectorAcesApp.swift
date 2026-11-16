@@ -1070,7 +1070,7 @@ private final class AirBattleScene: SKScene {
     private var hitCombo = 0
     private var comboDeadline: CGFloat = 0
     private let threat = SKLabelNode(fontNamed: "Menlo-Bold")
-    private let leftFlightHUD = LeftFlightHUDNode()
+    private let leftFlightHUD: LeftFlightHUDNode
     private let rightCombatHUD = RightCombatHUDNode()
     private let telemetryPanel = SKShapeNode()
     private let telemetryLines = (0..<19).map { _ in SKLabelNode(fontNamed: "Menlo-Bold") }
@@ -1101,6 +1101,7 @@ private final class AirBattleScene: SKScene {
         self.campaignMission = mission
         self.health = fighter.health
         self.ammo = fighter.ammunition
+        self.leftFlightHUD = LeftFlightHUDNode(fighter:fighter)
         super.init(size: size)
         scaleMode = .resizeFill
         anchorPoint = .zero
@@ -3735,12 +3736,14 @@ private final class LeftFlightHUDNode: SKNode {
     private let bottomTick=SKLabelNode(fontNamed:"Menlo")
     private let vsPointer=SKShapeNode(rectOf:CGSize(width:16,height:5))
     private let airframeShape=SKShapeNode()
+    private let fighter:Fighter
     private let healthLabel:SKLabelNode
     private let conditionPips:[SKShapeNode]
     private let headingLabel:SKLabelNode
     private let coverLabel:SKLabelNode
 
-    override init() {
+    init(fighter:Fighter) {
+        self.fighter=fighter
         airspeedLabel=SKLabelNode(fontNamed:"Menlo-Bold")
         energyLabel=SKLabelNode(fontNamed:"Menlo-Bold")
         altitudeLabel=SKLabelNode(fontNamed:"Menlo-Bold")
@@ -3893,33 +3896,88 @@ private final class LeftFlightHUDNode: SKNode {
         vsLabel.horizontalAlignmentMode = .center
         addChild(vsLabel)
 
-        // Fixed overhead silhouette, colour shifts with airframe damage.
-        let p=CGMutablePath()
-        p.move(to:CGPoint(x:110,y:-498))
-        p.addLine(to:CGPoint(x:116,y:-514))
-        p.addLine(to:CGPoint(x:123,y:-539))
-        p.addLine(to:CGPoint(x:181,y:-548))
-        p.addLine(to:CGPoint(x:183,y:-563))
-        p.addLine(to:CGPoint(x:123,y:-559))
-        p.addLine(to:CGPoint(x:119,y:-580))
-        p.addLine(to:CGPoint(x:137,y:-590))
-        p.addLine(to:CGPoint(x:137,y:-598))
-        p.addLine(to:CGPoint(x:105,y:-593))
-        p.addLine(to:CGPoint(x:73,y:-598))
-        p.addLine(to:CGPoint(x:73,y:-590))
-        p.addLine(to:CGPoint(x:91,y:-580))
-        p.addLine(to:CGPoint(x:87,y:-559))
-        p.addLine(to:CGPoint(x:27,y:-563))
-        p.addLine(to:CGPoint(x:29,y:-548))
-        p.addLine(to:CGPoint(x:87,y:-539))
-        p.addLine(to:CGPoint(x:94,y:-514))
-        p.addLine(to:CGPoint(x:100,y:-498))
-        p.closeSubpath()
-        airframeShape.path=p
-        airframeShape.fillColor=AcesHUDVisual.ice.withAlphaComponent(0.50)
+        // Recognition-style overhead aircraft planform, chosen from the
+        // selected hangar fighter rather than a single generic glyph.
+        // The P-38 has characteristic twin booms and a central nacelle;
+        // Thunderbolt, Mustang and Warhawk have distinct wing/tail geometry.
+        let outline = CGMutablePath()
+        let centerX:CGFloat = 110
+        let noseY:CGFloat = -498
+        func point(_ x:CGFloat,_ y:CGFloat) -> CGPoint {
+            CGPoint(x:centerX+x,y:noseY-y)
+        }
+        func trace(_ coords:[CGPoint], into path:CGMutablePath) {
+            guard let first=coords.first else { return }
+            path.move(to:first)
+            for p in coords.dropFirst() { path.addLine(to:p) }
+            path.closeSubpath()
+        }
+        let plan:[CGPoint]
+        switch fighter {
+        case .mustang:
+            plan=[point(0,0),point(7,22),point(9,38),
+                  point(74,54),point(78,65),point(15,60),
+                  point(11,82),point(32,92),point(30,100),
+                  point(0,94),point(-30,100),point(-32,92),
+                  point(-11,82),point(-15,60),point(-78,65),
+                  point(-74,54),point(-9,38),point(-7,22)]
+        case .thunderbolt:
+            plan=[point(0,0),point(12,18),point(15,40),
+                  point(78,54),point(84,68),point(17,64),
+                  point(14,83),point(35,94),point(35,101),
+                  point(0,96),point(-35,101),point(-35,94),
+                  point(-14,83),point(-17,64),point(-84,68),
+                  point(-78,54),point(-15,40),point(-12,18)]
+        case .lightning:
+            plan=[point(0,0),point(8,18),point(10,43),
+                  point(77,49),point(82,63),point(54,64),
+                  point(54,94),point(34,99),point(14,88),
+                  point(9,72),point(0,84),point(-9,72),
+                  point(-14,88),point(-34,99),point(-54,94),
+                  point(-54,64),point(-82,63),point(-77,49),
+                  point(-10,43),point(-8,18)]
+        case .warhawk:
+            plan=[point(0,0),point(7,20),point(11,43),
+                  point(75,52),point(67,66),point(13,61),
+                  point(10,83),point(34,91),point(33,99),
+                  point(0,93),point(-33,99),point(-34,91),
+                  point(-10,83),point(-13,61),point(-67,66),
+                  point(-75,52),point(-11,43),point(-7,20)]
+        }
+        trace(plan,into:outline)
+        airframeShape.path=outline
+        airframeShape.fillColor=AcesHUDVisual.ice.withAlphaComponent(0.28)
         airframeShape.strokeColor=AcesHUDVisual.ice
-        airframeShape.lineWidth=1.5
+        airframeShape.lineWidth=1.7
         addChild(airframeShape)
+        let detailing=SKShapeNode()
+        let details=CGMutablePath()
+        // Fuselage spine, canopy and elevator seam give the glyph an
+        // engineering drawing rather than a filled arcade-symbol look.
+        details.move(to:point(0,10))
+        details.addLine(to:point(0,86))
+        details.move(to:point(-10,80))
+        details.addLine(to:point(10,80))
+        details.addEllipse(in:CGRect(x:centerX-6,y:noseY-36,width:12,height:19))
+        if fighter == .lightning {
+            for side in [-1.0,1.0] {
+                let x=CGFloat(side)*43
+                details.move(to:point(x,39))
+                details.addLine(to:point(x,94))
+                details.addEllipse(in:CGRect(x:centerX+x-7,y:noseY-48,width:14,height:20))
+            }
+        } else {
+            for side in [-1.0,1.0] {
+                let sign=CGFloat(side)
+                details.move(to:point(sign*12,45))
+                details.addLine(to:point(sign*59,59))
+            }
+        }
+        detailing.path=details
+        detailing.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.72)
+        detailing.lineWidth=0.9
+        detailing.fillColor = .clear
+        addChild(detailing)
         healthLabel.position=CGPoint(x:211,y:-504)
         healthLabel.horizontalAlignmentMode = .right
         healthLabel.fontSize=10
