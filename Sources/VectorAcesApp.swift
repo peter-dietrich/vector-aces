@@ -2335,6 +2335,10 @@ private final class AirBattleScene: SKScene {
 
     private func showMissionBriefing() {
         missionStage = .briefing
+        // Restore the original classification when retrying after a
+        // FAILED/APPROVED after-action stamp.
+        classifiedStamp.text = "SECRET"
+        classifiedStamp.fontColor = SKColor(red:0.61,green:0.13,blue:0.12,alpha:0.82)
         missionBackdrop.isHidden = false
         missionBackdrop.fillTexture = paperTexture
         missionBackdrop.fillColor = .white
