@@ -642,7 +642,7 @@ private struct AcesPilotRecordSheet: View {
                             .font(.system(size: 38, weight: .black, design: .rounded))
                         HStack(spacing: 12) {
                             Text("WORLD WAR II  •  AIRCRAFT CATALOG")
-                            Text("BUILD 2026.11.15 (11) • AIRCRAFT PROFILES")
+                            Text("BUILD 2026.11.15 (12) • BANK RECOVERY")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(AcesStyle.ice.opacity(0.75))
                         }
@@ -1457,42 +1457,43 @@ private final class AirBattleScene: SKScene {
     // 2.5D bank projection: fixed flight mechanics, different visual depth
     // for near and far wings, underside exposure and canopy reflections.
     private func applyBankProjection(_ art:SKNode, bank:CGFloat) {
-        let roll=max(-1,min(1,bank))
+        // Absolute, reversible visual poses: never accumulate transforms.
+        // A dead zone snaps tiny residual banking to a mathematically exact
+        // level-aircraft pose, even after rapid alternating left/right turns.
+        let raw=max(-1,min(1,bank))
+        let roll:CGFloat = abs(raw) < 0.018 ? 0 : raw
         let amount=abs(roll)
-        art.xScale=1-amount*0.40
-        art.yScale=1+amount*0.13
-        art.zRotation=roll*0.13
-        art.position.x=roll*7
+        art.xScale=1-amount*0.34
+        art.yScale=1+amount*0.08
+        art.zRotation=roll*0.10
+        art.position.x=roll*5
+        art.position.y=0
 
-        // The player plane sits one level inside playerArtwork, while enemy
-        // nodes may be passed directly. SpriteKit // searches descendants.
         if let shadow=art.childNode(withName:"//aircraftShadow") {
-            shadow.position=CGPoint(x:4+roll*10,y:-4-amount*6)
-            shadow.alpha=0.18+amount*0.25
+            shadow.position=CGPoint(x:4+roll*8,y:-4-amount*5)
+            shadow.alpha=0.18+amount*0.23
         }
         for side in [-1.0,1.0] {
             let sign=CGFloat(side)
             let near=(roll*sign)>0
             let name=sign<0 ? "portWingSurface" : "starboardWingSurface"
             if let wing=art.childNode(withName:"//"+name) as? SKShapeNode {
-                wing.xScale=near ? 1+amount*0.13 : 1-amount*0.43
-                wing.yScale=near ? 1+amount*0.10 : 1-amount*0.13
-                wing.position.y=near ? -amount*5 : amount*5
-                // Preserve original national livery/paint at level flight.
-                // Depth is expressed by occlusion and opacity, not repainting
-                // the aircraft white/black on every frame.
-                wing.alpha=near ? 1 : 1-amount*0.30
-                wing.zPosition=near ? 3.5 : 0.3
+                wing.xScale=amount == 0 ? 1 : (near ? 1+amount*0.09 : 1-amount*0.30)
+                wing.yScale=amount == 0 ? 1 : (near ? 1+amount*0.06 : 1-amount*0.08)
+                wing.position=CGPoint(x:0,y:amount == 0 ? 0 : (near ? -amount*3 : amount*3))
+                wing.alpha=amount == 0 ? 1 : (near ? 1 : 1-amount*0.20)
+                // Restore original drawing order at level attitude.
+                wing.zPosition=amount == 0 ? (sign<0 ? 1.2 : 1.3) : (near ? 3.5 : 0.3)
             }
             let undersideName=sign<0 ? "portWingUnderside" : "starboardWingUnderside"
             if let underside=art.childNode(withName:"//"+undersideName) {
-                underside.alpha=near ? amount*0.96 : amount*0.17
-                underside.position.y=near ? -amount*7 : amount*3
+                underside.alpha=amount == 0 ? 0 : (near ? amount*0.88 : amount*0.12)
+                underside.position=CGPoint(x:0,y:amount == 0 ? 0 : (near ? -amount*5 : amount*2))
             }
         }
         if let glint=art.childNode(withName:"//canopyGlint") {
-            glint.position.x = -2-roll*4
-            glint.alpha=max(0.14,0.55-amount*0.25)
+            glint.position=CGPoint(x:-2-roll*3,y:glint.position.y)
+            glint.alpha=amount == 0 ? 1 : max(0.25,1-amount*0.35)
         }
     }
 
@@ -1955,7 +1956,11 @@ private final class AirBattleScene: SKScene {
         if left { heading += turnRate * dt }
         if right { heading -= turnRate * dt }
         let bankTarget: CGFloat = left ? -0.65 : right ? 0.65 : 0
-        bankAngle += (bankTarget - bankAngle) * min(1, dt * 3.6)
+        // Fast self-leveling after the turn key is released. The old 3.6/s
+        // smoothing left a noticeable residual bank after input stopped.
+        let bankResponse:CGFloat = bankTarget == 0 ? 10.0 : 7.5
+        bankAngle += (bankTarget - bankAngle) * min(1, dt * bankResponse)
+        if bankTarget == 0 && abs(bankAngle) < 0.012 { bankAngle = 0 }
         // Q/E remain the only vertical controls. Arcade rates (ft/sec) and
         // energy tradeoffs: sustained climb costs speed, dives restore it.
         let verticalProfile: (climb: CGFloat, dive: CGFloat)
@@ -2007,12 +2012,6 @@ private final class AirBattleScene: SKScene {
         // Scale is independent of plane rotation, speed, and hit detection.
         let screenBank = bankAngle / 0.65
         applyBankProjection(playerArtwork,bank:screenBank)
-        if let art=playerArtwork.children.first {
-            if let edge=art.childNode(withName:"bankUnderside") {
-                edge.alpha=min(1,abs(screenBank))*0.9
-                edge.position.x = -screenBank*12
-            }
-        }
         let velocity = CGVector(dx: cos(heading) * airspeed, dy: sin(heading) * airspeed)
         // Free flight with a generous camera dead-zone. The aircraft crosses the
         // screen naturally, and only then does the camera pan to follow it.
