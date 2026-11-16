@@ -1478,9 +1478,10 @@ private final class AirBattleScene: SKScene {
                 wing.xScale=near ? 1+amount*0.13 : 1-amount*0.43
                 wing.yScale=near ? 1+amount*0.10 : 1-amount*0.13
                 wing.position.y=near ? -amount*5 : amount*5
-                wing.fillColor=near ?
-                    SKColor.white.withAlphaComponent(0.42) :
-                    SKColor.black.withAlphaComponent(0.27)
+                // Preserve original national livery/paint at level flight.
+                // Depth is expressed by occlusion and opacity, not repainting
+                // the aircraft white/black on every frame.
+                wing.alpha=near ? 1 : 1-amount*0.30
                 wing.zPosition=near ? 3.5 : 0.3
             }
             let undersideName=sign<0 ? "portWingUnderside" : "starboardWingUnderside"
