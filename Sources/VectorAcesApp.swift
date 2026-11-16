@@ -642,7 +642,7 @@ private struct AcesPilotRecordSheet: View {
                             .font(.system(size: 38, weight: .black, design: .rounded))
                         HStack(spacing: 12) {
                             Text("WORLD WAR II  •  AIRCRAFT CATALOG")
-                            Text("BUILD 2026.11.15 (10) • AIRCRAFT / AAR")
+                            Text("BUILD 2026.11.15 (11) • AIRCRAFT PROFILES")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(AcesStyle.ice.opacity(0.75))
                         }
@@ -1196,203 +1196,302 @@ private final class AirBattleScene: SKScene {
         return super.resignFirstResponder()
     }
 
+    // Aircraft-recognition planforms. The moving sprites have the same
+    // identifying proportions as their historical hangar counterparts.
+    // World positioning, collision checks, movement and AI stay unchanged.
     private func drawAircraft(kind: Int, color: SKColor) -> SKNode {
-        // Original top-down silhouettes: -1 = selected US fighter, 0 = Fw 190,
-        // 1 = Bf 109, 2 = Ju 87 Stuka with identifiable gull wings.
-        let node = SKNode()
-        let isStuka = kind == 2
-        let isLightning = kind == -1 && fighter == .lightning
-        let isThunderbolt = kind == -1 && fighter == .thunderbolt
-        let span: CGFloat = isLightning ? 48 : isStuka ? 45 : isThunderbolt ? 39 : 35
-        let body = CGMutablePath()
-        body.move(to: CGPoint(x: -4.5, y: -42))
-        body.addLine(to: CGPoint(x: -6, y: -24))
-        body.addLine(to: CGPoint(x: -span * 0.8, y: -9))
-        if isStuka {
-            body.addLine(to: CGPoint(x: -span, y: -16))
-            body.addLine(to: CGPoint(x: -span, y: -6))
-            body.addLine(to: CGPoint(x: -12, y: 10))
+        let node=SKNode()
+        let type: String
+        if kind == -1 {
+            switch fighter {
+            case .mustang: type="mustang"
+            case .thunderbolt: type="thunderbolt"
+            case .lightning: type="lightning"
+            case .warhawk: type="warhawk"
+            }
         } else {
-            body.addLine(to: CGPoint(x: -span, y: 0))
-            body.addLine(to: CGPoint(x: -span * 0.91, y: 6))
-            body.addLine(to: CGPoint(x: -9, y: 12))
+            type = kind == 0 ? "fw190" : kind == 1 ? "bf109" : "stuka"
         }
-        body.addLine(to: CGPoint(x: -5.8, y: 34))
-        body.addLine(to: CGPoint(x: -2, y: 45))
-        body.addLine(to: CGPoint(x: 2, y: 45))
-        body.addLine(to: CGPoint(x: 5.8, y: 34))
-        body.addLine(to: CGPoint(x: 9, y: 12))
-        if isStuka {
-            body.addLine(to: CGPoint(x: span, y: -6))
-            body.addLine(to: CGPoint(x: span, y: -16))
-            body.addLine(to: CGPoint(x: span * 0.8, y: -9))
-        } else {
-            body.addLine(to: CGPoint(x: span * 0.91, y: 6))
-            body.addLine(to: CGPoint(x: span, y: 0))
-            body.addLine(to: CGPoint(x: span * 0.8, y: -9))
+
+        func polygon(_ pairs:[CGPoint]) -> CGPath {
+            let p=CGMutablePath()
+            if let first=pairs.first {
+                p.move(to:first)
+                for pt in pairs.dropFirst() { p.addLine(to:pt) }
+                p.closeSubpath()
+            }
+            return p
         }
-        body.addLine(to: CGPoint(x: 6, y: -24))
-        body.addLine(to: CGPoint(x: 4.5, y: -42))
-        body.closeSubpath()
-        let fuselage = SKShapeNode(path: body)
-        // Layered shading supplies fuselage volume without needing Metal or
-        // a 3D asset loader. Flight/combat hitboxes remain unchanged.
-        let shadow=SKShapeNode(path:body)
-        shadow.fillColor=SKColor.black.withAlphaComponent(0.25)
-        shadow.strokeColor = .clear
-        shadow.position=CGPoint(x:4,y:-4)
-        shadow.zPosition = -0.8
-        node.addChild(shadow)
-        fuselage.fillColor = color
-        fuselage.strokeColor = SKColor(white: 0.9, alpha: 0.85)
-        fuselage.lineWidth = 1.1
-        node.addChild(fuselage)
+        func pt(_ x:CGFloat,_ y:CGFloat)->CGPoint { CGPoint(x:x,y:y) }
+        func addPiece(_ points:[CGPoint], name:String, fill:SKColor,
+                      z:CGFloat=0, stroke:SKColor = SKColor(white:0.15,alpha:0.48)) -> SKShapeNode {
+            let piece=SKShapeNode(path:polygon(points))
+            piece.name=name
+            piece.fillColor=fill
+            piece.strokeColor=stroke
+            piece.lineWidth=0.95
+            piece.zPosition=z
+            node.addChild(piece)
+            return piece
+        }
+
+        let span:CGFloat
+        let nose:CGFloat
+        let tail:CGFloat
+        let wingRoot:CGFloat
+        let wingTip:CGFloat
+        let wingBack:CGFloat
+        let bodyHalf:CGFloat
+        let tailSpan:CGFloat
+        let canopyY:CGFloat
+        let radial:Bool
+        switch type {
+        case "mustang":
+            span=43; nose=49; tail = -43; wingRoot=13; wingTip=1; wingBack = -13
+            bodyHalf=5.6; tailSpan=17; canopyY=14; radial=false
+        case "thunderbolt":
+            span=47; nose=49; tail = -43; wingRoot=15; wingTip=3; wingBack = -16
+            bodyHalf=8.8; tailSpan=19; canopyY=12; radial=true
+        case "lightning":
+            span=53; nose=36; tail = -43; wingRoot=15; wingTip=2; wingBack = -12
+            bodyHalf=5.0; tailSpan=33; canopyY=13; radial=false
+        case "warhawk":
+            span=40; nose=52; tail = -42; wingRoot=10; wingTip=3; wingBack = -15
+            bodyHalf=6.3; tailSpan=17; canopyY=10; radial=false
+        case "fw190":
+            span=43; nose=47; tail = -40; wingRoot=12; wingTip=0; wingBack = -12
+            bodyHalf=7.5; tailSpan=17; canopyY=11; radial=true
+        case "bf109":
+            span=37; nose=51; tail = -44; wingRoot=11; wingTip=-1; wingBack = -13
+            bodyHalf=5.1; tailSpan=16; canopyY=14; radial=false
+        default: // Ju 87 dive bomber: distinctly inverted gull wings.
+            span=51; nose=46; tail = -49; wingRoot=9; wingTip=-13; wingBack = -23
+            bodyHalf=6.4; tailSpan=21; canopyY=6; radial=false
+        }
+
+        // Aircraft and its cast shadow: the offset becomes directional
+        // during banking, revealing the apparent height of the airframe.
+        let bodyPath:[CGPoint] = type == "lightning" ?
+            [pt(0,nose),pt(-4,30),pt(-5,5),pt(-6,-12),
+             pt(-3,-19),pt(3,-19),pt(6,-12),pt(5,5),pt(4,30)] :
+            [pt(0,nose),pt(-bodyHalf,nose-13),pt(-bodyHalf-1,16),
+             pt(-bodyHalf-2,-14),pt(-bodyHalf,-32),
+             pt(-3,tail),pt(3,tail),pt(bodyHalf,-32),
+             pt(bodyHalf+2,-14),pt(bodyHalf+1,16),pt(bodyHalf,nose-13)]
+        let shadow=addPiece(bodyPath,name:"aircraftShadow",
+                            fill:SKColor.black.withAlphaComponent(0.28),z:-4,stroke:.clear)
+        shadow.position=pt(4,-4)
+
+        // The twin-boom Lightning has two separate engines, full-length
+        // booms and a connecting horizontal stabilizer.
+        if type == "lightning" {
+            addPiece([pt(-34,-38),pt(-34,-43),pt(34,-43),pt(34,-38)],
+                     name:"twinTailBridge",fill:color,z:-1)
+            for sign in [-1.0,1.0] {
+                let x=CGFloat(sign)*27
+                addPiece([pt(x-5,33),pt(x-7,15),pt(x-6,-32),
+                          pt(x-8,-45),pt(x+8,-45),pt(x+6,-32),
+                          pt(x+7,15),pt(x+5,33)],
+                         name:sign<0 ? "portBoom" : "starboardBoom",
+                         fill:color,z:0)
+                let cowling=SKShapeNode(ellipseOf:CGSize(width:15,height:20))
+                cowling.position=pt(x,29)
+                cowling.fillColor=color
+                cowling.strokeColor=SKColor.black.withAlphaComponent(0.55)
+                cowling.zPosition=3
+                node.addChild(cowling)
+            }
+        }
+
+        let fuselage=addPiece(bodyPath,name:"fuselageVolume",fill:color,z:2,
+                              stroke:SKColor.white.withAlphaComponent(0.55))
+        fuselage.lineWidth=1.0
+
+        // Left/right wings are separate drawables so they respond to rolling
+        // with different apparent depth, light and exposed undersides.
         for side in [-1.0,1.0] {
             let sign=CGFloat(side)
-            let wing=SKShapeNode(path:{
-                let p=CGMutablePath()
-                p.move(to:CGPoint(x:sign*9,y:11))
-                p.addLine(to:CGPoint(x:sign*span*0.88,y:5))
-                p.addLine(to:CGPoint(x:sign*span,y:0))
-                p.addLine(to:CGPoint(x:sign*span*0.8,y:-7))
-                p.addLine(to:CGPoint(x:sign*10,y:-5))
-                p.closeSubpath()
-                return p
-            }())
-            wing.name=side<0 ? "portWingSurface" : "starboardWingSurface"
-            wing.fillColor=side<0 ? color.withAlphaComponent(0.48) :
-                                     SKColor.white.withAlphaComponent(0.17)
-            wing.strokeColor=SKColor.black.withAlphaComponent(0.22)
-            wing.lineWidth=0.65
-            wing.zPosition=1
-            node.addChild(wing)
-        }
-        let wingPanel = SKShapeNode(rectOf: CGSize(width: span * 1.5, height: 2))
-        wingPanel.position.y = 0
-        wingPanel.fillColor = .black.withAlphaComponent(0.26)
-        wingPanel.strokeColor = .clear
-        node.addChild(wingPanel)
-        // Visible underside lip: turns reveal a colored wing edge that is
-        // hidden at level flight. Purely visual; hitboxes do not change.
-        let edge=SKShapeNode(rectOf:CGSize(width:span*1.85,height:8),cornerRadius:1)
-        edge.fillColor=kind == 2 ? SKColor(red:0.79,green:0.67,blue:0.39,alpha:0.96)
-                                 : SKColor(red:0.46,green:0.68,blue:0.77,alpha:0.92)
-        edge.strokeColor = .white.withAlphaComponent(0.4)
-        edge.position.y = -12
-        edge.name="bankUnderside"
-        edge.zPosition = -1
-        edge.alpha = 0
-        node.addChild(edge)
-        let tail = SKShapeNode(rectOf: CGSize(width: isLightning ? 49 : 28, height: 5), cornerRadius: 1)
-        tail.position.y = -29
-        tail.fillColor = color.withAlphaComponent(0.94)
-        tail.strokeColor = .black.withAlphaComponent(0.48)
-        node.addChild(tail)
-        let canopy = SKShapeNode(ellipseOf: CGSize(width: 11, height: isStuka ? 28 : 19))
-        canopy.position.y = isStuka ? 7 : 11
-        canopy.fillColor = SKColor(red: 0.10, green: 0.25, blue: 0.34, alpha: 1)
-        canopy.strokeColor = .white.withAlphaComponent(0.7)
-        canopy.lineWidth=1.25
-        canopy.zPosition=3
-        node.addChild(canopy)
-        let canopyGlint=SKShapeNode(ellipseOf:CGSize(width:3,height:11))
-        canopyGlint.fillColor=SKColor.white.withAlphaComponent(0.44)
-        canopyGlint.strokeColor = .clear
-        canopyGlint.position=CGPoint(x:-2,y:isStuka ? 9 : 13)
-        canopyGlint.zPosition=4
-        node.addChild(canopyGlint)
-        for side in [-1.0, 1.0] {
-            let sign = CGFloat(side)
-            let marking = SKShapeNode(circleOfRadius: kind == -1 ? 6.5 : 5.2)
-            marking.position = CGPoint(x: sign * span * 0.66, y: -1)
-            marking.fillColor = kind == -1 ? .white : .black.withAlphaComponent(0.83)
-            marking.strokeColor = kind == -1 ? .blue : .white.withAlphaComponent(0.75)
-            marking.lineWidth = 1.8
-            node.addChild(marking)
-            if isLightning {
-                let boom = SKShapeNode(rectOf: CGSize(width: 6, height: 63), cornerRadius: 2)
-                boom.position = CGPoint(x: sign * 22, y: -2)
-                boom.fillColor = color
-                boom.strokeColor = .black.withAlphaComponent(0.45)
-                node.addChild(boom)
+            let root=type == "lightning" ? 6.0 : bodyHalf
+            let points:[CGPoint]
+            if type == "stuka" {
+                points=[pt(sign*root,wingRoot),
+                        pt(sign*21,wingRoot-10),
+                        pt(sign*38,wingTip+5),
+                        pt(sign*span,wingTip),
+                        pt(sign*(span-2),wingBack),
+                        pt(sign*20,-10),pt(sign*root,-8)]
+            } else if type == "lightning" {
+                points=[pt(sign*root,wingRoot),
+                        pt(sign*28,15),pt(sign*47,wingTip+4),
+                        pt(sign*span,wingTip),
+                        pt(sign*(span-2),wingBack),
+                        pt(sign*28,-7),pt(sign*root,-9)]
+            } else {
+                let rounded=type == "thunderbolt" || type == "fw190"
+                points=[pt(sign*root,wingRoot),
+                        pt(sign*(span*0.62),wingRoot-3),
+                        pt(sign*(span-(rounded ? 4 : 1)),wingTip+4),
+                        pt(sign*span,wingTip),
+                        pt(sign*(span-(rounded ? 4 : 2)),wingBack),
+                        pt(sign*(span*0.52),wingBack+3),
+                        pt(sign*root,-11)]
             }
-            if kind == 0 {
-                let cannon = SKShapeNode(rectOf: CGSize(width: 2.4, height: 14))
-                cannon.position = CGPoint(x: sign * 20, y: 13)
-                cannon.fillColor = .darkGray
-                cannon.strokeColor = .clear
-                node.addChild(cannon)
+            let wing=addPiece(points,
+                name:sign<0 ? "portWingSurface" : "starboardWingSurface",
+                fill:color,z:sign<0 ? 1.2 : 1.3,
+                stroke:SKColor.white.withAlphaComponent(0.50))
+            wing.userData=NSMutableDictionary(dictionary:["side":sign])
+            let lip=addPiece([pt(sign*root,-10),pt(sign*(span-3),wingBack),
+                              pt(sign*span,wingBack-4),pt(sign*root,-15)],
+                             name:sign<0 ? "portWingUnderside" : "starboardWingUnderside",
+                             fill:type == "stuka" ?
+                                 SKColor(red:0.70,green:0.63,blue:0.46,alpha:1) :
+                                 color.withAlphaComponent(0.8),z:0.1)
+            lip.alpha=0
+
+            let aileron=SKShapeNode(path:polygon([
+                pt(sign*(span*0.55),wingBack+2),
+                pt(sign*(span-4),wingBack+2),
+                pt(sign*(span-5),wingBack+5),
+                pt(sign*(span*0.57),wingBack+5)]))
+            aileron.strokeColor=SKColor.black.withAlphaComponent(0.56)
+            aileron.fillColor=SKColor.black.withAlphaComponent(0.11)
+            aileron.lineWidth=0.6
+            aileron.zPosition=2.2
+            wing.addChild(aileron)
+
+            let insignia=SKShapeNode(circleOfRadius:5.6)
+            insignia.position=pt(sign*span*0.65,(wingTip+wingBack)*0.5+2)
+            insignia.fillColor=kind == -1 ? .white :
+                SKColor.black.withAlphaComponent(0.79)
+            insignia.strokeColor=kind == -1 ?
+                SKColor(red:0.15,green:0.25,blue:0.54,alpha:1) :
+                SKColor.white.withAlphaComponent(0.72)
+            insignia.lineWidth=1
+            insignia.zPosition=2.4
+            wing.addChild(insignia)
+
+            if type == "stuka" {
+                let gear=SKShapeNode(ellipseOf:CGSize(width:5,height:14))
+                gear.position=pt(sign*28,-15)
+                gear.fillColor=SKColor(red:0.16,green:0.17,blue:0.14,alpha:1)
+                gear.strokeColor=color
+                gear.zPosition=0.4
+                node.addChild(gear)
             }
         }
-        // Animated propeller disc rather than a stationary vertical bar.
-        let prop = SKShapeNode(ellipseOf: CGSize(width: isLightning ? 16 : 24, height: 5))
-        prop.fillColor = .white.withAlphaComponent(0.28)
-        prop.strokeColor = .white.withAlphaComponent(0.22)
-        prop.position.y = 43
-        prop.name = "prop"
-        prop.run(.repeatForever(.sequence([.scaleX(to: 0.35, duration: 0.07),
-                                            .scaleX(to: 1.1, duration: 0.07)])))
-        node.addChild(prop)
-        // Panel lines, gun ports, cowling and exhaust details scale with the wing.
-        let spine = SKShapeNode(rectOf: CGSize(width: 2, height: 42), cornerRadius: 1)
-        spine.position.y = -1
-        spine.fillColor = .black.withAlphaComponent(0.20)
-        spine.strokeColor = .clear
-        node.addChild(spine)
-        let engine = SKShapeNode(circleOfRadius: isThunderbolt ? 8 : 6)
-        engine.position.y = 30
-        engine.fillColor = color.withAlphaComponent(0.8)
-        engine.strokeColor = .black.withAlphaComponent(0.65)
-        engine.lineWidth = 1.2
-        node.addChild(engine)
-        for side in [-1.0, 1.0] {
-            let direction = CGFloat(side)
-            let aileron = SKShapeNode(rectOf: CGSize(width: span * 0.49, height: 2), cornerRadius: 0.5)
-            aileron.position = CGPoint(x: direction * span * 0.68, y: -6)
-            aileron.zRotation = direction * 0.06
-            aileron.fillColor = .black.withAlphaComponent(0.37)
-            aileron.strokeColor = .clear
-            node.addChild(aileron)
-            for j in 0..<3 {
-                let panel = SKShapeNode(rectOf: CGSize(width: 2.1, height: 5), cornerRadius: 0.3)
-                panel.position = CGPoint(x: direction * CGFloat(11 + j * 7), y: 9 - CGFloat(j) * 2)
-                panel.fillColor = .black.withAlphaComponent(0.58)
-                panel.strokeColor = .clear
-                node.addChild(panel)
+
+        if type != "lightning" {
+            for side in [-1.0,1.0] {
+                let sign=CGFloat(side)
+                addPiece([pt(sign*4,-28),pt(sign*tailSpan,-33),
+                          pt(sign*tailSpan,-38),pt(sign*3,-36)],
+                         name:sign<0 ? "portTailplane" : "starboardTailplane",
+                         fill:color,z:2)
             }
-            let exhaust = SKShapeNode(rectOf: CGSize(width: 2.5, height: 8), cornerRadius: 1)
-            exhaust.position = CGPoint(x: direction * 8, y: 22)
-            exhaust.fillColor = SKColor(white: 0.16, alpha: 0.92)
-            exhaust.strokeColor = .clear
-            node.addChild(exhaust)
+        }
+        let rudder=addPiece([pt(-3,tail),pt(-5,tail+12),pt(0,tail+17),
+                             pt(5,tail+12),pt(3,tail)],name:"tailFin",
+                            fill:color,z:3)
+        rudder.lineWidth=0.8
+
+        // More substantial radial cowling, especially on P-47 and Fw 190;
+        // slender inline noses on the P-51, P-40 and Bf 109.
+        if radial {
+            let ring=SKShapeNode(ellipseOf:CGSize(width:bodyHalf*2.2,height:16))
+            ring.position=pt(0,nose-9)
+            ring.fillColor=color.withAlphaComponent(0.88)
+            ring.strokeColor=SKColor.black.withAlphaComponent(0.72)
+            ring.lineWidth=2
+            ring.zPosition=4
+            node.addChild(ring)
+            let dark=SKShapeNode(ellipseOf:CGSize(width:bodyHalf*1.25,height:9))
+            dark.position=ring.position
+            dark.fillColor=SKColor.black.withAlphaComponent(0.5)
+            dark.strokeColor = .clear
+            dark.zPosition=4.2
+            node.addChild(dark)
+        } else {
+            let spine=SKShapeNode(rectOf:CGSize(width:2.5,height:24))
+            spine.position=pt(0,nose-12)
+            spine.fillColor=SKColor.white.withAlphaComponent(0.20)
+            spine.strokeColor = .clear
+            spine.zPosition=3.1
+            node.addChild(spine)
+        }
+
+        let cockpit=SKShapeNode(ellipseOf:CGSize(width:type == "stuka" ? 11 : 10,
+                                                 height:type == "stuka" ? 28 : 19))
+        cockpit.name="cockpit"
+        cockpit.position=pt(0,canopyY)
+        cockpit.fillColor=SKColor(red:0.10,green:0.24,blue:0.32,alpha:1)
+        cockpit.strokeColor=SKColor.white.withAlphaComponent(0.72)
+        cockpit.lineWidth=1.15
+        cockpit.zPosition=5
+        node.addChild(cockpit)
+        let glint=SKShapeNode(ellipseOf:CGSize(width:2.6,height:10))
+        glint.name="canopyGlint"
+        glint.position=pt(-2,canopyY+1)
+        glint.fillColor=SKColor.white.withAlphaComponent(0.52)
+        glint.strokeColor = .clear
+        glint.zPosition=6
+        node.addChild(glint)
+
+        let propellerStations:[CGFloat]=type == "lightning" ? [-27,27] : [0]
+        for x in propellerStations {
+            let spinner=SKShapeNode(ellipseOf:CGSize(width:radial ? 22 : 19,height:4))
+            spinner.position=pt(x,type == "lightning" ? 39 : nose)
+            spinner.name="prop"
+            spinner.fillColor=SKColor.white.withAlphaComponent(0.28)
+            spinner.strokeColor=SKColor.white.withAlphaComponent(0.17)
+            spinner.zPosition=6
+            spinner.run(.repeatForever(.sequence([
+                .scaleX(to:0.45,duration:0.075),
+                .scaleX(to:1.12,duration:0.075)
+            ])))
+            node.addChild(spinner)
         }
         return node
     }
 
-    // A strong, smooth top-down roll projection: foreshortened wings, exposed
-    // wing edges and fuselage lean. Keep world position, heading and collision
-    // geometry untouched; only the aircraft artwork changes.
+    // 2.5D bank projection: fixed flight mechanics, different visual depth
+    // for near and far wings, underside exposure and canopy reflections.
     private func applyBankProjection(_ art:SKNode, bank:CGFloat) {
         let roll=max(-1,min(1,bank))
         let amount=abs(roll)
-        // Foreshorten the horizontal wings more than the longitudinal body:
-        // shading and underside reveal visually convey a bank / rolled side.
-        art.xScale=1-amount*0.57
-        art.yScale=1+amount*0.10
-        art.zRotation=roll*0.20
-        art.position.x=roll*9
-        if let edge=art.childNode(withName:"bankUnderside") {
-            edge.alpha=amount*0.95
-            edge.position.x = -roll*12
-            edge.yScale=1+amount*0.7
+        art.xScale=1-amount*0.40
+        art.yScale=1+amount*0.13
+        art.zRotation=roll*0.13
+        art.position.x=roll*7
+
+        // The player plane sits one level inside playerArtwork, while enemy
+        // nodes may be passed directly. SpriteKit // searches descendants.
+        if let shadow=art.childNode(withName:"//aircraftShadow") {
+            shadow.position=CGPoint(x:4+roll*10,y:-4-amount*6)
+            shadow.alpha=0.18+amount*0.25
         }
-        for name in ["portWingSurface","starboardWingSurface"] {
-            if let wing=art.childNode(withName:name) as? SKShapeNode {
-                let near=(name == "portWingSurface") == (roll > 0)
-                wing.alpha=0.72 + (near ? 0.28 : -0.42)*amount
-                wing.position.y=(near ? -1 : 1)*amount*5
-                wing.xScale=near ? 1+amount*0.13 : 1-amount*0.25
+        for side in [-1.0,1.0] {
+            let sign=CGFloat(side)
+            let near=(roll*sign)>0
+            let name=sign<0 ? "portWingSurface" : "starboardWingSurface"
+            if let wing=art.childNode(withName:"//"+name) as? SKShapeNode {
+                wing.xScale=near ? 1+amount*0.13 : 1-amount*0.43
+                wing.yScale=near ? 1+amount*0.10 : 1-amount*0.13
+                wing.position.y=near ? -amount*5 : amount*5
+                wing.fillColor=near ?
+                    SKColor.white.withAlphaComponent(0.42) :
+                    SKColor.black.withAlphaComponent(0.27)
+                wing.zPosition=near ? 3.5 : 0.3
             }
+            let undersideName=sign<0 ? "portWingUnderside" : "starboardWingUnderside"
+            if let underside=art.childNode(withName:"//"+undersideName) {
+                underside.alpha=near ? amount*0.96 : amount*0.17
+                underside.position.y=near ? -amount*7 : amount*3
+            }
+        }
+        if let glint=art.childNode(withName:"//canopyGlint") {
+            glint.position.x = -2-roll*4
+            glint.alpha=max(0.14,0.55-amount*0.25)
         }
     }
 
