@@ -2017,90 +2017,104 @@ private final class AirBattleScene: SKScene {
     }
 
     private func makeBriefingPaper() -> SKTexture {
-        let w:CGFloat=850, h:CGFloat=1100
-        let image=NSImage(size:NSSize(width:w,height:h),flipped:false) { _ in
-            guard let ctx=NSGraphicsContext.current?.cgContext else { return false }
-            let rect=CGRect(x:0,y:0,width:w,height:h)
-            // Match the hangar's sepia aircraft maintenance plates: bright
-            // ivory parchment in the middle, warm weathering at the edges.
-            let colors=[CGColor(red:0.75,green:0.65,blue:0.47,alpha:1),
-                        CGColor(red:0.95,green:0.89,blue:0.74,alpha:1),
-                        CGColor(red:0.80,green:0.70,blue:0.51,alpha:1)]
-            let space=CGColorSpaceCreateDeviceRGB()
-            if let gradient=CGGradient(colorsSpace:space,
-                 colors:colors as CFArray,locations:[0,0.52,1]) {
-                ctx.drawLinearGradient(gradient,start:CGPoint(x:0,y:0),
+        // A distinct archival operations plate, not a plain beige page:
+        // illustrated paper stock, heavy printed order register, letterpress
+        // rules, ledger grid, and an inset instrument/route sketch.
+        let w:CGFloat = 850, h:CGFloat = 1100
+        let image = NSImage(size:NSSize(width:w,height:h),flipped:false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            let parchment = CGColorSpaceCreateDeviceRGB()
+            let base = [
+                CGColor(red:0.70,green:0.60,blue:0.42,alpha:1),
+                CGColor(red:0.96,green:0.91,blue:0.77,alpha:1),
+                CGColor(red:0.82,green:0.72,blue:0.53,alpha:1)
+            ]
+            if let grad = CGGradient(colorsSpace:parchment,colors:base as CFArray,
+                                     locations:[0,0.56,1]) {
+                ctx.drawLinearGradient(grad,start:CGPoint(x:0,y:0),
                                        end:CGPoint(x:w,y:h),options:[])
             }
-            // Drafting-board ruled grid, closely matching the archived
-            // engineering charts in the aircraft hangar. Fine grid is faint
-            // enough to stay behind body copy rather than compete with it.
-            for x in stride(from:CGFloat(28),through:w-24,by:24) {
-                let major = Int(x-28) % 120 == 0
-                ctx.setStrokeColor(CGColor(red:0.39,green:0.30,blue:0.18,
-                                           alpha:major ? 0.12 : 0.055))
-                ctx.setLineWidth(major ? 0.85 : 0.45)
-                ctx.move(to:CGPoint(x:x,y:22))
-                ctx.addLine(to:CGPoint(x:x,y:h-22))
-                ctx.strokePath()
-            }
-            for y in stride(from:CGFloat(26),through:h-24,by:24) {
-                let major = Int(y-26) % 120 == 0
-                ctx.setStrokeColor(CGColor(red:0.39,green:0.30,blue:0.18,
-                                           alpha:major ? 0.12 : 0.055))
-                ctx.setLineWidth(major ? 0.85 : 0.45)
-                ctx.move(to:CGPoint(x:22,y:y))
-                ctx.addLine(to:CGPoint(x:w-22,y:y))
-                ctx.strokePath()
-            }
-            // Fold marks, discoloration and irregular typewriter-paper fibers.
-            for _ in 0..<1800 {
-                let x=CGFloat.random(in:5...(w-5))
-                let y=CGFloat.random(in:5...(h-5))
-                let tone=CGFloat.random(in:0.04...0.17)
-                ctx.setFillColor(CGColor(red:0.36,green:0.27,blue:0.16,
-                                        alpha:tone))
-                ctx.fill(CGRect(x:x,y:y,width:CGFloat.random(in:0.5...2.8),
-                                height:CGFloat.random(in:0.4...1.8)))
-            }
-            ctx.setStrokeColor(CGColor(red:0.37,green:0.28,blue:0.18,alpha:0.22))
-            ctx.setLineWidth(1.8)
-            for x in [w*0.37,w*0.71] {
-                ctx.move(to:CGPoint(x:x,y:0))
-                ctx.addLine(to:CGPoint(x:x+3,y:h))
-                ctx.strokePath()
-            }
-            ctx.setStrokeColor(CGColor(red:0.44,green:0.32,blue:0.16,alpha:0.52))
-            ctx.setLineWidth(3)
-            ctx.stroke(CGRect(x:9,y:10,width:w-18,height:h-20))
-            ctx.setStrokeColor(CGColor(red:0.54,green:0.39,blue:0.17,alpha:0.40))
-            ctx.setLineWidth(1)
-            ctx.stroke(CGRect(x:20,y:20,width:w-40,height:h-40))
-            // Engraved upper document register and lower approval footer.
-            ctx.setStrokeColor(CGColor(red:0.31,green:0.25,blue:0.17,alpha:0.45))
-            ctx.setLineWidth(1.5)
-            for y in [h-112,h-174,104] as [CGFloat] {
-                ctx.move(to:CGPoint(x:34,y:y))
-                ctx.addLine(to:CGPoint(x:w-34,y:y))
-                ctx.strokePath()
-            }
-            // Corner reference marks, like a 1940s operations drafting plate.
-            for x in [CGFloat(36),w-36] {
-                for y in [CGFloat(36),h-36] {
-                    ctx.move(to:CGPoint(x:x-9,y:y))
-                    ctx.addLine(to:CGPoint(x:x+9,y:y))
-                    ctx.move(to:CGPoint(x:x,y:y-9))
-                    ctx.addLine(to:CGPoint(x:x,y:y+9))
-                    ctx.strokePath()
+            // Faded pigment blooms and a very fine lithographic grain.
+            for i in 0..<240 {
+                let x = CGFloat((i*157+23)%849)
+                let y = CGFloat((i*263+37)%1099)
+                let radius = CGFloat(13+(i*19)%80)
+                let shade = CGColor(red:0.38,green:0.26,blue:0.12,alpha:0.052)
+                if let bloom=CGGradient(colorsSpace:parchment,
+                                         colors:[shade,CGColor(red:0.38,green:0.26,blue:0.12,alpha:0)] as CFArray,
+                                         locations:[0,1]) {
+                    ctx.drawRadialGradient(bloom,startCenter:CGPoint(x:x,y:y),
+                                           startRadius:0,endCenter:CGPoint(x:x,y:y),
+                                           endRadius:radius,options:[])
                 }
             }
-            // Stained curled-paper corners without a literal straight neon box.
-            for corner in [CGPoint(x:13,y:14),CGPoint(x:w-13,y:14),
-                           CGPoint(x:13,y:h-14),CGPoint(x:w-13,y:h-14)] {
-                ctx.setFillColor(CGColor(red:0.40,green:0.27,blue:0.12,alpha:0.13))
-                ctx.fillEllipse(in:CGRect(x:corner.x-52,y:corner.y-36,
-                                          width:104,height:72))
+            for i in 0..<1800 {
+                let x=CGFloat((i*173+41)%847)
+                let y=CGFloat((i*317+17)%1097)
+                ctx.setFillColor(CGColor(red:0.30,green:0.22,blue:0.13,alpha:0.07))
+                ctx.fill(CGRect(x:x,y:y,width:CGFloat(i%3+1),height:1))
             }
+            // Restrained pale drafting-plate grid beneath the type.
+            for i in 0...33 {
+                let x=CGFloat(26+i*24)
+                ctx.setStrokeColor(CGColor(red:0.30,green:0.28,blue:0.21,
+                                           alpha:i%5 == 0 ? 0.13 : 0.043))
+                ctx.setLineWidth(i%5 == 0 ? 1 : 0.5)
+                ctx.move(to:CGPoint(x:x,y:20))
+                ctx.addLine(to:CGPoint(x:x,y:h-20))
+                ctx.strokePath()
+            }
+            for i in 0...43 {
+                let y=CGFloat(26+i*24)
+                ctx.setStrokeColor(CGColor(red:0.30,green:0.28,blue:0.21,
+                                           alpha:i%5 == 0 ? 0.13 : 0.043))
+                ctx.setLineWidth(i%5 == 0 ? 1 : 0.5)
+                ctx.move(to:CGPoint(x:20,y:y))
+                ctx.addLine(to:CGPoint(x:w-20,y:y))
+                ctx.strokePath()
+            }
+            // Worn double frame and black-olive military print register.
+            ctx.setStrokeColor(CGColor(red:0.34,green:0.25,blue:0.15,alpha:0.70))
+            ctx.setLineWidth(3.6)
+            ctx.stroke(CGRect(x:9,y:10,width:w-18,height:h-20))
+            ctx.setLineWidth(1.1)
+            ctx.stroke(CGRect(x:22,y:23,width:w-44,height:h-46))
+            ctx.setFillColor(CGColor(red:0.15,green:0.19,blue:0.15,alpha:0.94))
+            ctx.fill(CGRect(x:27,y:h-110,width:w-54,height:83))
+            ctx.setFillColor(CGColor(red:0.35,green:0.28,blue:0.18,alpha:0.30))
+            ctx.fill(CGRect(x:27,y:h-160,width:w-54,height:33))
+            ctx.setStrokeColor(CGColor(red:0.32,green:0.24,blue:0.16,alpha:0.58))
+            ctx.setLineWidth(1.5)
+            for y in [h-171,h-159,122,98] as [CGFloat] {
+                ctx.move(to:CGPoint(x:32,y:y))
+                ctx.addLine(to:CGPoint(x:w-32,y:y))
+                ctx.strokePath()
+            }
+            // Ornamental document filing notches, register lines and edge
+            // references resemble a field-worn aircraft maintenance plate.
+            for i in 0..<24 {
+                let y=CGFloat(165+i*30)
+                ctx.setStrokeColor(CGColor(red:0.24,green:0.23,blue:0.16,
+                                           alpha:i%5 == 0 ? 0.5 : 0.19))
+                ctx.setLineWidth(i%5 == 0 ? 1.4 : 0.7)
+                ctx.move(to:CGPoint(x:24,y:y))
+                ctx.addLine(to:CGPoint(x:i%5 == 0 ? 47 : 34,y:y))
+                ctx.strokePath()
+            }
+            // Compass/attack plot in the otherwise-unused right margin.
+            // This is part of the printed stock, not a live enemy bearing.
+            let center=CGPoint(x:733,y:590)
+            ctx.setStrokeColor(CGColor(red:0.34,green:0.28,blue:0.18,alpha:0.33))
+            ctx.setLineWidth(1.3)
+            ctx.strokeEllipse(in:CGRect(x:center.x-64,y:center.y-64,width:128,height:128))
+            ctx.strokeEllipse(in:CGRect(x:center.x-40,y:center.y-40,width:80,height:80))
+            ctx.move(to:CGPoint(x:center.x-76,y:center.y))
+            ctx.addLine(to:CGPoint(x:center.x+76,y:center.y))
+            ctx.move(to:CGPoint(x:center.x,y:center.y-76))
+            ctx.addLine(to:CGPoint(x:center.x,y:center.y+76))
+            ctx.strokePath()
+            ctx.setFillColor(CGColor(red:0.38,green:0.27,blue:0.15,alpha:0.60))
+            ctx.fillEllipse(in:CGRect(x:center.x-4,y:center.y-4,width:8,height:8))
             return true
         }
         let texture=SKTexture(image:image)
@@ -2126,7 +2140,7 @@ private final class AirBattleScene: SKScene {
         }
         briefingLetterhead.text = "U.S. ARMY AIR FORCES / OPERATIONS DIVISION"
         briefingLetterhead.fontSize = 12
-        briefingLetterhead.fontColor = SKColor(red:0.26,green:0.18,blue:0.11,alpha:1)
+        briefingLetterhead.fontColor = SKColor(red:0.96,green:0.90,blue:0.73,alpha:1)
         briefingLetterhead.horizontalAlignmentMode = .center
         briefingLetterhead.zPosition = 179
         addChild(briefingLetterhead)
@@ -2205,8 +2219,8 @@ private final class AirBattleScene: SKScene {
         }
         briefingLetterhead.position = CGPoint(x:rect.midX,y:rect.maxY-39)
         classifiedStamp.position = CGPoint(x:rect.maxX-95,y:rect.maxY-69)
-        briefingSeal.position = CGPoint(x:rect.minX+67,y:rect.minY+56)
-        briefingSignature.position = CGPoint(x:rect.minX+132,y:rect.minY+56)
+        briefingSeal.position = CGPoint(x:rect.minX+67,y:rect.minY+58)
+        briefingSignature.position = CGPoint(x:rect.minX+142,y:rect.minY+58)
         missionText.position = CGPoint(x:size.width/2,y:size.height-26)
     }
 
@@ -2221,8 +2235,8 @@ private final class AirBattleScene: SKScene {
             situation = "ENEMY: SIX JU 87, FW 190 FIGHTER ESCORT."
             friendly = "FRIENDLY: ALLIED FIELD DEFENCE / ONE FIGHTER."
             instructions = "INTERCEPT DIVE BOMBERS BEFORE TARGET STRIKE."
-            route = "FIELD > EAST HOLD > INTERCEPT SECTOR"
-            ingress = "TRACK INBOUND FORMATIONS ON LONG-RANGE RADAR."
+            route = "FIELD > ALERT ZONE > INTERCEPT SECTOR"
+            ingress = "SCAN ALL APPROACH SECTORS ON LONG-RANGE RADAR."
             returnRoute = "RECOVER WEST TO PROTECTED AIRFIELD."
             success = "DESTROY 4 OF 6; AIRFIELD MUST SURVIVE."
         case .escort:
@@ -2246,7 +2260,7 @@ private final class AirBattleScene: SKScene {
             friendly = "FRIENDLY: STRATEGIC BRIDGE GARRISON."
             instructions = "DENY ENEMY STRIKE ON RIVER CROSSING."
             route = "STAGING > RIVER APPROACH > BRIDGE COVER"
-            ingress = "INTERCEPT BOMBERS EAST OF THE CROSSING."
+            ingress = "INTERCEPT HOSTILES ON THEIR RADAR APPROACH."
             returnRoute = "PATROL DEFENCE LINE UNTIL ALL WAVES PASS."
             success = "DESTROY 5 OF 8; BRIDGE MUST SURVIVE."
         }
