@@ -642,7 +642,7 @@ private struct AcesPilotRecordSheet: View {
                             .font(.system(size: 38, weight: .black, design: .rounded))
                         HStack(spacing: 12) {
                             Text("WORLD WAR II  •  AIRCRAFT CATALOG")
-                            Text("BUILD 2026.11.15 (6) • GLASS HUD")
+                            Text("BUILD 2026.11.15 (7) • HUD / BRIEFING")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(AcesStyle.ice.opacity(0.75))
                         }
@@ -2134,19 +2134,36 @@ private final class AirBattleScene: SKScene {
         missionBackdrop.path = CGPath(roundedRect:rect,
             cornerWidth:paper ? 1 : 12,cornerHeight:paper ? 1 : 12,
             transform:nil)
-        let left = rect.minX+36
-        let spacing = max(20,min(30,(boxHeight-136)/17))
-        for (i,label) in missionCopy.enumerated() {
-            label.position = CGPoint(
-                x:paper ? left : rect.midX,
-                y:rect.maxY - (paper ? 89 : 41) -
-                  CGFloat(i)*(paper ? spacing : 46))
-            label.horizontalAlignmentMode = paper ? .left : .center
+        let left = rect.minX + 38
+        if paper {
+            // Explicit paragraph rhythm: subject, numbered sections, body
+            // and a separate stamped footer. All positions scale with paper.
+            let offsets:[CGFloat] = [
+                89, 121, 154, 190, 220, 244,
+                286, 316, 340,
+                382, 412, 436, 460,
+                504, 533, 557, 581
+            ]
+            let scale = boxHeight / 676.0
+            for (i,label) in missionCopy.enumerated() {
+                label.position = CGPoint(
+                    x:left,
+                    y:rect.maxY - offsets[min(i,offsets.count-1)] * scale)
+                label.horizontalAlignmentMode = .left
+            }
+            // Launch instruction belongs to the paper footer, not execution.
+            missionCopy[17].position = CGPoint(x:rect.midX,y:rect.minY+21*scale)
+            missionCopy[17].horizontalAlignmentMode = .center
+        } else {
+            for (i,label) in missionCopy.enumerated() {
+                label.position = CGPoint(x:rect.midX,y:rect.maxY-41-CGFloat(i)*46)
+                label.horizontalAlignmentMode = .center
+            }
         }
         briefingLetterhead.position = CGPoint(x:rect.midX,y:rect.maxY-39)
         classifiedStamp.position = CGPoint(x:rect.maxX-95,y:rect.maxY-69)
-        briefingSeal.position = CGPoint(x:rect.minX+70,y:rect.minY+48)
-        briefingSignature.position = CGPoint(x:rect.minX+125,y:rect.minY+55)
+        briefingSeal.position = CGPoint(x:rect.minX+67,y:rect.minY+66)
+        briefingSignature.position = CGPoint(x:rect.minX+132,y:rect.minY+67)
         missionText.position = CGPoint(x:size.width/2,y:size.height-26)
     }
 
@@ -2226,9 +2243,10 @@ private final class AirBattleScene: SKScene {
         for (i,item) in missionCopy.enumerated() {
             item.text = lines[i]
             item.isHidden = false
-            item.fontName = i == 0 || i == 1 || i == 17 ?
+            let sectionHeader = [3,6,9,13].contains(i)
+            item.fontName = (i == 0 || i == 1 || i == 17 || sectionHeader) ?
                 "AmericanTypewriter-Bold" : "AmericanTypewriter"
-            item.fontSize = i == 1 ? 14 : i == 17 ? 12 : 10.6
+            item.fontSize = i == 1 ? 14 : i == 17 ? 12 : sectionHeader ? 11.4 : 10.5
             item.fontColor = i == 17 ?
                 SKColor(red:0.57,green:0.12,blue:0.10,alpha:1) :
                 SKColor(red:0.22,green:0.17,blue:0.12,alpha:1)
@@ -3613,7 +3631,7 @@ private enum AcesHUDVisual {
         let shape = CGPath(roundedRect:box,cornerWidth:10,cornerHeight:10,transform:nil)
 
         let tint = SKShapeNode(path:shape)
-        tint.fillColor = SKColor(red:0.025,green:0.083,blue:0.13,alpha:0.29)
+        tint.fillColor = SKColor(red:0.025,green:0.083,blue:0.13,alpha:0.38)
         tint.strokeColor = ice.withAlphaComponent(0.22)
         tint.lineWidth = 0.85
         glass.addChild(tint)
@@ -4045,6 +4063,7 @@ private final class RightCombatHUDNode: SKNode {
                            color:AcesHUDVisual.amber,parent:self)
         scoreCaption.text="SCORE"
         scoreCaption.position=CGPoint(x:15,y:-46)
+        scoreCaption.horizontalAlignmentMode = .left
         scoreCaption.fontSize=9
         scoreCaption.fontColor=AcesHUDVisual.muted
         addChild(scoreCaption)
@@ -4054,14 +4073,17 @@ private final class RightCombatHUDNode: SKNode {
         scoreText.horizontalAlignmentMode = .left
         addChild(scoreText)
         waveText.position=CGPoint(x:15,y:-99)
+        waveText.horizontalAlignmentMode = .left
         waveText.fontColor = .white
         waveText.fontSize=12
         addChild(waveText)
         killsText.position=CGPoint(x:15,y:-119)
+        killsText.horizontalAlignmentMode = .left
         killsText.fontColor=AcesHUDVisual.muted
         killsText.fontSize=10
         addChild(killsText)
         contactsText.position=CGPoint(x:15,y:-137)
+        contactsText.horizontalAlignmentMode = .left
         contactsText.fontColor=AcesHUDVisual.muted
         contactsText.fontSize=10
         addChild(contactsText)
@@ -4112,6 +4134,7 @@ private final class RightCombatHUDNode: SKNode {
         threatRing.isHidden=true
         addChild(threatRing)
         targetInfo.position=CGPoint(x:14,y:-172)
+        targetInfo.horizontalAlignmentMode = .left
         targetInfo.fontSize=10
         targetInfo.fontColor = .white
         addChild(targetInfo)
@@ -4122,6 +4145,7 @@ private final class RightCombatHUDNode: SKNode {
         addChild(targetDelta)
 
         ammoText.position=CGPoint(x:15,y:-263)
+        ammoText.horizontalAlignmentMode = .left
         ammoText.fontSize=27
         ammoText.fontColor=AcesHUDVisual.ice
         addChild(ammoText)
@@ -4137,6 +4161,7 @@ private final class RightCombatHUDNode: SKNode {
         }
 
         missionTitleText.position=CGPoint(x:14,y:-363)
+        missionTitleText.horizontalAlignmentMode = .left
         missionTitleText.fontSize=10
         missionTitleText.fontColor=AcesHUDVisual.ice
         addChild(missionTitleText)
@@ -4162,6 +4187,7 @@ private final class RightCombatHUDNode: SKNode {
         clockArc.lineWidth=4
         addChild(clockArc)
         clockText.position=CGPoint(x:48,y:-433)
+        clockText.horizontalAlignmentMode = .left
         clockText.fontSize=10
         clockText.fontColor=AcesHUDVisual.amber
         addChild(clockText)
@@ -4203,10 +4229,12 @@ private final class RightCombatHUDNode: SKNode {
         radarLabel.text="12,500 UNITS"
         addChild(radarLabel)
         radarStatus.position=CGPoint(x:14,y:-494)
+        radarStatus.horizontalAlignmentMode = .left
         radarStatus.fontSize=9
         radarStatus.fontColor=AcesHUDVisual.amber
         addChild(radarStatus)
         radarETA.position=CGPoint(x:14,y:-665)
+        radarETA.horizontalAlignmentMode = .left
         radarETA.fontSize=9
         radarETA.fontColor=AcesHUDVisual.amber
         addChild(radarETA)
@@ -4238,7 +4266,7 @@ private final class RightCombatHUDNode: SKNode {
         if let clock=v.targetClock,let range=v.targetRange {
             targetInfo.text=String(format:"BANDIT %02d:00  %04d",clock,Int(range))
         } else {
-            targetInfo.text="NO CONFIRMED CONTACT"
+            targetInfo.text="SEARCHING FOR TARGET"
         }
         radarStatus.text=v.inboundFlights > 0 ?
             "\(v.inboundFlights) FLIGHT(S) / \(v.incomingBombers) BOMBERS" :
