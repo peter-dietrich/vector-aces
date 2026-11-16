@@ -1262,10 +1262,10 @@ private final class AirBattleScene: SKScene {
             span=43; nose=47; tail = -40; wingRoot=12; wingTip=0; wingBack = -12
             bodyHalf=7.5; tailSpan=17; canopyY=11; radial=true
         case "bf109":
-            span=37; nose=51; tail = -44; wingRoot=11; wingTip=-1; wingBack = -13
+            span=37; nose=51; tail = -44; wingRoot=11; wingTip = -1; wingBack = -13
             bodyHalf=5.1; tailSpan=16; canopyY=14; radial=false
         default: // Ju 87 dive bomber: distinctly inverted gull wings.
-            span=51; nose=46; tail = -49; wingRoot=9; wingTip=-13; wingBack = -23
+            span=51; nose=46; tail = -49; wingRoot=9; wingTip = -13; wingBack = -23
             bodyHalf=6.4; tailSpan=21; canopyY=6; radial=false
         }
 
