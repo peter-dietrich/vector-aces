@@ -642,7 +642,7 @@ private struct AcesPilotRecordSheet: View {
                             .font(.system(size: 38, weight: .black, design: .rounded))
                         HStack(spacing: 12) {
                             Text("WORLD WAR II  •  AIRCRAFT CATALOG")
-                            Text("BUILD 2026.11.15 (8) • CAMPAIGN TACTICS")
+                            Text("BUILD 2026.11.15 (9) • ARCHIVE PLATES")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(AcesStyle.ice.opacity(0.75))
                         }
@@ -3793,6 +3793,7 @@ private final class LeftFlightHUDNode: SKNode {
     private let bottomTick=SKLabelNode(fontNamed:"Menlo")
     private let vsPointer=SKShapeNode(rectOf:CGSize(width:16,height:5))
     private let airframeShape=SKShapeNode()
+    private var hasPlateArtwork = false
     private let fighter:Fighter
     private let healthLabel:SKLabelNode
     private let conditionPips:[SKShapeNode]
@@ -4002,10 +4003,34 @@ private final class LeftFlightHUDNode: SKNode {
                   point(-75,52),point(-11,43),point(-7,20)]
         }
         trace(plan,into:outline)
+        // Use the historically styled TOP VIEW from the same photographic
+        // maintenance plate shown in the hangar. The aircraft is centered
+        // in the lower-left figure of the 768x512 resource artwork.
+        // Fall back to the vector if an asset is missing.
+        let plateName:String
+        switch fighter {
+        case .mustang: plateName = "HangarP51"
+        case .thunderbolt: plateName = "HangarP47"
+        case .lightning: plateName = "HangarP38"
+        case .warhawk: plateName = "HangarP40"
+        }
+        if let url=Bundle.main.url(forResource:plateName,withExtension:"png"),
+           let source=NSImage(contentsOf:url),
+           let cg=source.cgImage(forProposedRect:nil,context:nil,hints:nil),
+           cg.width>=260 && cg.height>=490,
+           let cropped=cg.cropping(to:CGRect(x:8,y:303,width:247,height:185)) {
+            let image=SKSpriteNode(texture:SKTexture(cgImage:cropped))
+            image.position=CGPoint(x:111,y:-548)
+            image.size=CGSize(width:182,height:110)
+            image.zPosition=0
+            addChild(image)
+            hasPlateArtwork=true
+        }
         airframeShape.path=outline
         airframeShape.fillColor=AcesHUDVisual.ice.withAlphaComponent(0.28)
         airframeShape.strokeColor=AcesHUDVisual.ice
         airframeShape.lineWidth=1.7
+        airframeShape.alpha = hasPlateArtwork ? 0.18 : 1
         addChild(airframeShape)
         let detailing=SKShapeNode()
         let details=CGMutablePath()
@@ -4034,6 +4059,7 @@ private final class LeftFlightHUDNode: SKNode {
         detailing.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.72)
         detailing.lineWidth=0.9
         detailing.fillColor = .clear
+        detailing.alpha = hasPlateArtwork ? 0.22 : 1
         addChild(detailing)
         healthLabel.position=CGPoint(x:211,y:-504)
         healthLabel.horizontalAlignmentMode = .right
