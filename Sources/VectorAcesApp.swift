@@ -2265,7 +2265,7 @@ private final class AirBattleScene: SKScene {
             }
         }
         briefingLetterhead.position = CGPoint(x:rect.midX,y:rect.maxY-39)
-        classifiedStamp.position = CGPoint(x:rect.maxX-95,y:rect.maxY-69)
+        classifiedStamp.position = CGPoint(x:rect.maxX-95,y:rect.maxY-150)
         briefingSeal.position = CGPoint(x:rect.minX+67,y:rect.minY+58)
         briefingSignature.position = CGPoint(x:rect.minX+142,y:rect.minY+58)
         missionText.position = CGPoint(x:size.width/2,y:size.height-26)
@@ -2355,8 +2355,9 @@ private final class AirBattleScene: SKScene {
             item.fontName = (i == 0 || i == 1 || i == 17 || sectionHeader) ?
                 "AmericanTypewriter-Bold" : "AmericanTypewriter"
             item.fontSize = i == 1 ? 14 : i == 17 ? 12 : sectionHeader ? 11.4 : 10.5
-            item.fontColor = i == 17 ?
-                SKColor(red:0.57,green:0.12,blue:0.10,alpha:1) :
+            item.fontColor = i == 0 ?
+                SKColor(red:0.96,green:0.91,blue:0.76,alpha:1) :
+                i == 17 ? SKColor(red:0.57,green:0.12,blue:0.10,alpha:1) :
                 SKColor(red:0.22,green:0.17,blue:0.12,alpha:1)
         }
         layoutMissionOverlay()
@@ -2784,8 +2785,9 @@ private final class AirBattleScene: SKScene {
             let heading=[0,1,3,6,9,13,17].contains(index)
             label.fontName=heading ? "AmericanTypewriter-Bold" : "AmericanTypewriter"
             label.fontSize=index == 1 ? 14 : index == 17 ? 10.5 : heading ? 11.3 : 10.2
-            label.fontColor=index == 17 ?
-                SKColor(red:0.56,green:0.14,blue:0.12,alpha:1) :
+            label.fontColor=index == 0 ?
+                SKColor(red:0.96,green:0.91,blue:0.76,alpha:1) :
+                index == 17 ? SKColor(red:0.56,green:0.14,blue:0.12,alpha:1) :
                 SKColor(red:0.22,green:0.17,blue:0.12,alpha:1)
         }
         layoutMissionOverlay()
