@@ -642,7 +642,7 @@ private struct AcesPilotRecordSheet: View {
                             .font(.system(size: 38, weight: .black, design: .rounded))
                         HStack(spacing: 12) {
                             Text("WORLD WAR II  •  AIRCRAFT CATALOG")
-                            Text("BUILD 2026.11.15 (7) • HUD / BRIEFING")
+                            Text("BUILD 2026.11.15 (8) • CAMPAIGN TACTICS")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(AcesStyle.ice.opacity(0.75))
                         }
@@ -3443,11 +3443,13 @@ private final class AirBattleScene: SKScene {
                         priority:Bool=false,pending:Bool=false) {
             let dx=position.x-player.position.x
             let dy=position.y-player.position.y
-            let lateral=sin(heading)*dx-cos(heading)*dy
-            let forward=cos(heading)*dx+sin(heading)*dy
+            // North-up plot: right is east (+X), top is north (+Y).
+            // Compass stays geographically meaningful during player turns.
+            let lateral=dx
+            let forward=dy
             contacts.append(AcesRadarContact(lateral:lateral,forward:forward,
                             bomber:bomber,ally:ally,ace:ace,objective:objective,
-                            heading:enemyHeading.map{$0-heading},flightID:flightID,
+                            heading:enemyHeading,flightID:flightID,
                             priority:priority,pending:pending))
         }
         for b in bandits {
@@ -4270,6 +4272,16 @@ private final class RightCombatHUDNode: SKNode {
         addChild(clockText)
 
         let radarCenter=CGPoint(x:124,y:-568)
+        // North-up radar, with stable compass lettering inside the outer
+        // circumference. Place the E label above range annotations.
+        AcesHUDVisual.text("N",at:CGPoint(x:124,y:-488),size:9,
+                           color:AcesHUDVisual.ice,parent:self,align:.center)
+        AcesHUDVisual.text("S",at:CGPoint(x:124,y:-647),size:9,
+                           color:AcesHUDVisual.ice,parent:self,align:.center)
+        AcesHUDVisual.text("W",at:CGPoint(x:45,y:-568),size:9,
+                           color:AcesHUDVisual.ice,parent:self,align:.center)
+        AcesHUDVisual.text("E",at:CGPoint(x:203,y:-555),size:9,
+                           color:AcesHUDVisual.ice,parent:self,align:.center)
         for fraction in [CGFloat(0.33),0.66,1.0] {
             let ring=SKShapeNode(circleOfRadius:88*fraction)
             ring.position=radarCenter
@@ -4438,7 +4450,7 @@ private final class RightCombatHUDNode: SKNode {
                 let trace=CGMutablePath()
                 trace.move(to:CGPoint(x:x,y:y))
                 let rel=enemyHeading // Precomputed player-relative bearing.
-                trace.addLine(to:CGPoint(x:x-sin(rel)*14,y:y+cos(rel)*14))
+                trace.addLine(to:CGPoint(x:x-cos(rel)*14,y:y-sin(rel)*14))
                 let track=SKShapeNode(path:trace)
                 track.strokeColor=color.withAlphaComponent(0.62)
                 track.lineWidth=1.4
