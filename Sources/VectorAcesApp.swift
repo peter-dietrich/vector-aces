@@ -642,7 +642,7 @@ private struct AcesPilotRecordSheet: View {
                             .font(.system(size: 38, weight: .black, design: .rounded))
                         HStack(spacing: 12) {
                             Text("WORLD WAR II  •  AIRCRAFT CATALOG")
-                            Text("BUILD 2026.11.15 (5) • ARTWORK BUNDLED")
+                            Text("BUILD 2026.11.15 (6) • GLASS HUD")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(AcesStyle.ice.opacity(0.75))
                         }
@@ -3605,12 +3605,38 @@ private enum AcesHUDVisual {
     static let amber = SKColor(red:1.0,green:0.70,blue:0.31,alpha:1)
     static let muted = SKColor(white:0.79,alpha:0.9)
     static let red = SKColor(red:1.0,green:0.30,blue:0.27,alpha:1)
-    static func panel(_ box:CGRect) -> SKShapeNode {
-        let node = SKShapeNode(path:CGPath(roundedRect:box,cornerWidth:9,cornerHeight:9,transform:nil))
-        node.fillColor = SKColor(red:0.025,green:0.071,blue:0.11,alpha:0.82)
-        node.strokeColor = ice.withAlphaComponent(0.28)
-        node.lineWidth = 0.75
-        return node
+    // Glass HUD backing: translucent terrain-visible panes with a controlled
+    // navy tint, softly reflective top edge and fine cyan contour.
+    // Keep gauges/text outside the panel node so their contrast is unaffected.
+    static func panel(_ box:CGRect) -> SKNode {
+        let glass = SKNode()
+        let shape = CGPath(roundedRect:box,cornerWidth:10,cornerHeight:10,transform:nil)
+
+        let tint = SKShapeNode(path:shape)
+        tint.fillColor = SKColor(red:0.025,green:0.083,blue:0.13,alpha:0.29)
+        tint.strokeColor = ice.withAlphaComponent(0.22)
+        tint.lineWidth = 0.85
+        glass.addChild(tint)
+
+        // A whisper of darker tint at the lower edge anchors white numerics
+        // without making the pane a solid opaque black rectangle.
+        let lower = SKShapeNode(rect:CGRect(x:box.minX+1,y:box.minY+2,
+                                            width:box.width-2,height:box.height*0.30),
+                                cornerRadius:8)
+        lower.fillColor = SKColor(red:0.012,green:0.045,blue:0.075,alpha:0.075)
+        lower.strokeColor = .clear
+        glass.addChild(lower)
+
+        // Double, restrained top-edge glint gives the glass its depth.
+        let highlight = line(CGPoint(x:box.minX+12,y:box.maxY-2),
+                             CGPoint(x:box.maxX-12,y:box.maxY-2),
+                             color:SKColor(white:1,alpha:0.14),width:1.0)
+        glass.addChild(highlight)
+        let edge = line(CGPoint(x:box.minX+12,y:box.maxY-4),
+                        CGPoint(x:box.maxX-12,y:box.maxY-4),
+                        color:ice.withAlphaComponent(0.07),width:0.7)
+        glass.addChild(edge)
+        return glass
     }
     @discardableResult
     static func text(_ value:String, at point:CGPoint, size:CGFloat=10,
