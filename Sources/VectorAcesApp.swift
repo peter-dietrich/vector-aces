@@ -1235,10 +1235,38 @@ private final class AirBattleScene: SKScene {
         body.addLine(to: CGPoint(x: 4.5, y: -42))
         body.closeSubpath()
         let fuselage = SKShapeNode(path: body)
+        // Layered shading supplies fuselage volume without needing Metal or
+        // a 3D asset loader. Flight/combat hitboxes remain unchanged.
+        let shadow=SKShapeNode(path:body)
+        shadow.fillColor=SKColor.black.withAlphaComponent(0.25)
+        shadow.strokeColor = .clear
+        shadow.position=CGPoint(x:4,y:-4)
+        shadow.zPosition = -0.8
+        node.addChild(shadow)
         fuselage.fillColor = color
         fuselage.strokeColor = SKColor(white: 0.9, alpha: 0.85)
         fuselage.lineWidth = 1.1
         node.addChild(fuselage)
+        for side in [-1.0,1.0] {
+            let sign=CGFloat(side)
+            let wing=SKShapeNode(path:{
+                let p=CGMutablePath()
+                p.move(to:CGPoint(x:sign*9,y:11))
+                p.addLine(to:CGPoint(x:sign*span*0.88,y:5))
+                p.addLine(to:CGPoint(x:sign*span,y:0))
+                p.addLine(to:CGPoint(x:sign*span*0.8,y:-7))
+                p.addLine(to:CGPoint(x:sign*10,y:-5))
+                p.closeSubpath()
+                return p
+            }())
+            wing.name=side<0 ? "portWingSurface" : "starboardWingSurface"
+            wing.fillColor=side<0 ? color.withAlphaComponent(0.48) :
+                                     SKColor.white.withAlphaComponent(0.17)
+            wing.strokeColor=SKColor.black.withAlphaComponent(0.22)
+            wing.lineWidth=0.65
+            wing.zPosition=1
+            node.addChild(wing)
+        }
         let wingPanel = SKShapeNode(rectOf: CGSize(width: span * 1.5, height: 2))
         wingPanel.position.y = 0
         wingPanel.fillColor = .black.withAlphaComponent(0.26)
@@ -1264,7 +1292,15 @@ private final class AirBattleScene: SKScene {
         canopy.position.y = isStuka ? 7 : 11
         canopy.fillColor = SKColor(red: 0.10, green: 0.25, blue: 0.34, alpha: 1)
         canopy.strokeColor = .white.withAlphaComponent(0.7)
+        canopy.lineWidth=1.25
+        canopy.zPosition=3
         node.addChild(canopy)
+        let canopyGlint=SKShapeNode(ellipseOf:CGSize(width:3,height:11))
+        canopyGlint.fillColor=SKColor.white.withAlphaComponent(0.44)
+        canopyGlint.strokeColor = .clear
+        canopyGlint.position=CGPoint(x:-2,y:isStuka ? 9 : 13)
+        canopyGlint.zPosition=4
+        node.addChild(canopyGlint)
         for side in [-1.0, 1.0] {
             let sign = CGFloat(side)
             let marking = SKShapeNode(circleOfRadius: kind == -1 ? 6.5 : 5.2)
@@ -1339,13 +1375,24 @@ private final class AirBattleScene: SKScene {
     private func applyBankProjection(_ art:SKNode, bank:CGFloat) {
         let roll=max(-1,min(1,bank))
         let amount=abs(roll)
-        art.xScale=1-amount*0.68
-        art.yScale=1+amount*0.18
-        art.zRotation=roll*0.24
-        art.position.x=roll*12
+        // Foreshorten the horizontal wings more than the longitudinal body:
+        // shading and underside reveal visually convey a bank / rolled side.
+        art.xScale=1-amount*0.57
+        art.yScale=1+amount*0.10
+        art.zRotation=roll*0.20
+        art.position.x=roll*9
         if let edge=art.childNode(withName:"bankUnderside") {
-            edge.alpha=amount*0.9
+            edge.alpha=amount*0.95
             edge.position.x = -roll*12
+            edge.yScale=1+amount*0.7
+        }
+        for name in ["portWingSurface","starboardWingSurface"] {
+            if let wing=art.childNode(withName:name) as? SKShapeNode {
+                let near=(name == "portWingSurface") == (roll > 0)
+                wing.alpha=0.72 + (near ? 0.28 : -0.42)*amount
+                wing.position.y=(near ? -1 : 1)*amount*5
+                wing.xScale=near ? 1+amount*0.13 : 1-amount*0.25
+            }
         }
     }
 
@@ -4021,34 +4068,15 @@ private final class LeftFlightHUDNode: SKNode {
                   point(-75,52),point(-11,43),point(-7,20)]
         }
         trace(plan,into:outline)
-        // Use the historically styled TOP VIEW from the same photographic
-        // maintenance plate shown in the hangar. The aircraft is centered
-        // in the lower-left figure of the 768x512 resource artwork.
-        // Fall back to the vector if an asset is missing.
-        let plateName:String
-        switch fighter {
-        case .mustang: plateName = "HangarP51"
-        case .thunderbolt: plateName = "HangarP47"
-        case .lightning: plateName = "HangarP38"
-        case .warhawk: plateName = "HangarP40"
-        }
-        if let url=Bundle.main.url(forResource:plateName,withExtension:"png"),
-           let source=NSImage(contentsOf:url),
-           let cg=source.cgImage(forProposedRect:nil,context:nil,hints:nil),
-           cg.width>=260 && cg.height>=490,
-           let cropped=cg.cropping(to:CGRect(x:8,y:303,width:247,height:185)) {
-            let image=SKSpriteNode(texture:SKTexture(cgImage:cropped))
-            image.position=CGPoint(x:111,y:-548)
-            image.size=CGSize(width:182,height:110)
-            image.zPosition=0
-            addChild(image)
-            hasPlateArtwork=true
-        }
+        // Aircraft-only shaded recognition plan. No rectangular parchment
+        // crop: the entire shape responds to the existing damage palette.
+        // Shape and reference linework retain fighter-specific proportions.
+        hasPlateArtwork = false
         airframeShape.path=outline
         airframeShape.fillColor=AcesHUDVisual.ice.withAlphaComponent(0.28)
         airframeShape.strokeColor=AcesHUDVisual.ice
         airframeShape.lineWidth=1.7
-        airframeShape.alpha = hasPlateArtwork ? 0.18 : 1
+        airframeShape.alpha = 1
         addChild(airframeShape)
         let detailing=SKShapeNode()
         let details=CGMutablePath()
@@ -4077,8 +4105,29 @@ private final class LeftFlightHUDNode: SKNode {
         detailing.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.72)
         detailing.lineWidth=0.9
         detailing.fillColor = .clear
-        detailing.alpha = hasPlateArtwork ? 0.22 : 1
+        detailing.alpha = 1
         addChild(detailing)
+        // Thin metallic wing and tail ribs form an aircraft-only technical
+        // rendering, retaining the shape's live health color.
+        let plateDetail=CGMutablePath()
+        for sign in [-1.0,1.0] {
+            let side=CGFloat(sign)
+            plateDetail.move(to:point(12*side,53))
+            plateDetail.addLine(to:point(61*side,61))
+            plateDetail.move(to:point(17*side,57))
+            plateDetail.addLine(to:point(18*side,63))
+            plateDetail.move(to:point(29*side,59))
+            plateDetail.addLine(to:point(30*side,64))
+            plateDetail.move(to:point(42*side,60))
+            plateDetail.addLine(to:point(43*side,65))
+            plateDetail.move(to:point(7*side,86))
+            plateDetail.addLine(to:point(28*side,94))
+        }
+        let panels=SKShapeNode(path:plateDetail)
+        panels.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.60)
+        panels.lineWidth=0.7
+        panels.fillColor = .clear
+        addChild(panels)
         healthLabel.position=CGPoint(x:211,y:-504)
         healthLabel.horizontalAlignmentMode = .right
         healthLabel.fontSize=10
