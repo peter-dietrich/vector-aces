@@ -642,7 +642,7 @@ private struct AcesPilotRecordSheet: View {
                             .font(.system(size: 38, weight: .black, design: .rounded))
                         HStack(spacing: 12) {
                             Text("WORLD WAR II  •  AIRCRAFT CATALOG")
-                            Text("BUILD 2026.11.15 (12) • BANK RECOVERY")
+                            Text("BUILD 2026.11.15 (13) • CLEAN PROFILE")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(AcesStyle.ice.opacity(0.75))
                         }
@@ -1269,8 +1269,8 @@ private final class AirBattleScene: SKScene {
             bodyHalf=6.4; tailSpan=21; canopyY=6; radial=false
         }
 
-        // Aircraft and its cast shadow: the offset becomes directional
-        // during banking, revealing the apparent height of the airframe.
+        // One coherent fuselage silhouette. An earlier offset duplicate
+        // protruded outside the wing and looked like a detached aircraft part.
         let bodyPath:[CGPoint] = type == "lightning" ?
             [pt(0,nose),pt(-4,30),pt(-5,5),pt(-6,-12),
              pt(-3,-19),pt(3,-19),pt(6,-12),pt(5,5),pt(4,30)] :
@@ -1278,10 +1278,6 @@ private final class AirBattleScene: SKScene {
              pt(-bodyHalf-2,-14),pt(-bodyHalf,-32),
              pt(-3,tail),pt(3,tail),pt(bodyHalf,-32),
              pt(bodyHalf+2,-14),pt(bodyHalf+1,16),pt(bodyHalf,nose-13)]
-        let shadow=addPiece(bodyPath,name:"aircraftShadow",
-                            fill:SKColor.black.withAlphaComponent(0.28),z:-4,stroke:.clear)
-        shadow.position=pt(4,-4)
-
         // The twin-boom Lightning has two separate engines, full-length
         // booms and a connecting horizontal stabilizer.
         if type == "lightning" {
@@ -1461,18 +1457,15 @@ private final class AirBattleScene: SKScene {
         // A dead zone snaps tiny residual banking to a mathematically exact
         // level-aircraft pose, even after rapid alternating left/right turns.
         let raw=max(-1,min(1,bank))
-        let roll:CGFloat = abs(raw) < 0.018 ? 0 : raw
+        // Visual deadband eliminates lingering half-exposed wing surfaces.
+        let roll:CGFloat = abs(raw) < 0.12 ? 0 : raw
         let amount=abs(roll)
-        art.xScale=1-amount*0.34
-        art.yScale=1+amount*0.08
-        art.zRotation=roll*0.10
-        art.position.x=roll*5
+        art.xScale=1-amount*0.29
+        art.yScale=1+amount*0.06
+        art.zRotation=roll*0.08
+        art.position.x=roll*3
         art.position.y=0
 
-        if let shadow=art.childNode(withName:"//aircraftShadow") {
-            shadow.position=CGPoint(x:4+roll*8,y:-4-amount*5)
-            shadow.alpha=0.18+amount*0.23
-        }
         for side in [-1.0,1.0] {
             let sign=CGFloat(side)
             let near=(roll*sign)>0
@@ -1480,15 +1473,15 @@ private final class AirBattleScene: SKScene {
             if let wing=art.childNode(withName:"//"+name) as? SKShapeNode {
                 wing.xScale=amount == 0 ? 1 : (near ? 1+amount*0.09 : 1-amount*0.30)
                 wing.yScale=amount == 0 ? 1 : (near ? 1+amount*0.06 : 1-amount*0.08)
-                wing.position=CGPoint(x:0,y:amount == 0 ? 0 : (near ? -amount*3 : amount*3))
+                wing.position=CGPoint(x:0,y:amount == 0 ? 0 : (near ? -amount*1.5 : amount*1.5))
                 wing.alpha=amount == 0 ? 1 : (near ? 1 : 1-amount*0.20)
                 // Restore original drawing order at level attitude.
                 wing.zPosition=amount == 0 ? (sign<0 ? 1.2 : 1.3) : (near ? 3.5 : 0.3)
             }
             let undersideName=sign<0 ? "portWingUnderside" : "starboardWingUnderside"
             if let underside=art.childNode(withName:"//"+undersideName) {
-                underside.alpha=amount == 0 ? 0 : (near ? amount*0.88 : amount*0.12)
-                underside.position=CGPoint(x:0,y:amount == 0 ? 0 : (near ? -amount*5 : amount*2))
+                underside.alpha=amount < 0.22 ? 0 : (near ? amount*0.68 : 0)
+                underside.position=CGPoint(x:0,y:amount < 0.22 ? 0 : (near ? -amount*2 : 0))
             }
         }
         if let glint=art.childNode(withName:"//canopyGlint") {
