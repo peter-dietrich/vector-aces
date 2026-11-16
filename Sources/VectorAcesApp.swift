@@ -2021,14 +2021,37 @@ private final class AirBattleScene: SKScene {
         let image=NSImage(size:NSSize(width:w,height:h),flipped:false) { _ in
             guard let ctx=NSGraphicsContext.current?.cgContext else { return false }
             let rect=CGRect(x:0,y:0,width:w,height:h)
-            let colors=[CGColor(red:0.68,green:0.59,blue:0.42,alpha:1),
-                        CGColor(red:0.91,green:0.84,blue:0.65,alpha:1),
-                        CGColor(red:0.75,green:0.67,blue:0.49,alpha:1)]
+            // Match the hangar's sepia aircraft maintenance plates: bright
+            // ivory parchment in the middle, warm weathering at the edges.
+            let colors=[CGColor(red:0.75,green:0.65,blue:0.47,alpha:1),
+                        CGColor(red:0.95,green:0.89,blue:0.74,alpha:1),
+                        CGColor(red:0.80,green:0.70,blue:0.51,alpha:1)]
             let space=CGColorSpaceCreateDeviceRGB()
             if let gradient=CGGradient(colorsSpace:space,
                  colors:colors as CFArray,locations:[0,0.52,1]) {
                 ctx.drawLinearGradient(gradient,start:CGPoint(x:0,y:0),
                                        end:CGPoint(x:w,y:h),options:[])
+            }
+            // Drafting-board ruled grid, closely matching the archived
+            // engineering charts in the aircraft hangar. Fine grid is faint
+            // enough to stay behind body copy rather than compete with it.
+            for x in stride(from:CGFloat(28),through:w-24,by:24) {
+                let major = Int(x-28) % 120 == 0
+                ctx.setStrokeColor(CGColor(red:0.39,green:0.30,blue:0.18,
+                                           alpha:major ? 0.12 : 0.055))
+                ctx.setLineWidth(major ? 0.85 : 0.45)
+                ctx.move(to:CGPoint(x:x,y:22))
+                ctx.addLine(to:CGPoint(x:x,y:h-22))
+                ctx.strokePath()
+            }
+            for y in stride(from:CGFloat(26),through:h-24,by:24) {
+                let major = Int(y-26) % 120 == 0
+                ctx.setStrokeColor(CGColor(red:0.39,green:0.30,blue:0.18,
+                                           alpha:major ? 0.12 : 0.055))
+                ctx.setLineWidth(major ? 0.85 : 0.45)
+                ctx.move(to:CGPoint(x:22,y:y))
+                ctx.addLine(to:CGPoint(x:w-22,y:y))
+                ctx.strokePath()
             }
             // Fold marks, discoloration and irregular typewriter-paper fibers.
             for _ in 0..<1800 {
@@ -2047,12 +2070,30 @@ private final class AirBattleScene: SKScene {
                 ctx.addLine(to:CGPoint(x:x+3,y:h))
                 ctx.strokePath()
             }
-            ctx.setStrokeColor(CGColor(red:0.44,green:0.32,blue:0.16,alpha:0.35))
+            ctx.setStrokeColor(CGColor(red:0.44,green:0.32,blue:0.16,alpha:0.52))
             ctx.setLineWidth(3)
             ctx.stroke(CGRect(x:9,y:10,width:w-18,height:h-20))
-            ctx.setStrokeColor(CGColor(red:0.54,green:0.39,blue:0.17,alpha:0.31))
+            ctx.setStrokeColor(CGColor(red:0.54,green:0.39,blue:0.17,alpha:0.40))
             ctx.setLineWidth(1)
             ctx.stroke(CGRect(x:20,y:20,width:w-40,height:h-40))
+            // Engraved upper document register and lower approval footer.
+            ctx.setStrokeColor(CGColor(red:0.31,green:0.25,blue:0.17,alpha:0.45))
+            ctx.setLineWidth(1.5)
+            for y in [h-112,h-174,104] as [CGFloat] {
+                ctx.move(to:CGPoint(x:34,y:y))
+                ctx.addLine(to:CGPoint(x:w-34,y:y))
+                ctx.strokePath()
+            }
+            // Corner reference marks, like a 1940s operations drafting plate.
+            for x in [CGFloat(36),w-36] {
+                for y in [CGFloat(36),h-36] {
+                    ctx.move(to:CGPoint(x:x-9,y:y))
+                    ctx.addLine(to:CGPoint(x:x+9,y:y))
+                    ctx.move(to:CGPoint(x:x,y:y-9))
+                    ctx.addLine(to:CGPoint(x:x,y:y+9))
+                    ctx.strokePath()
+                }
+            }
             // Stained curled-paper corners without a literal straight neon box.
             for corner in [CGPoint(x:13,y:14),CGPoint(x:w-13,y:14),
                            CGPoint(x:13,y:h-14),CGPoint(x:w-13,y:h-14)] {
@@ -2083,8 +2124,8 @@ private final class AirBattleScene: SKScene {
             label.zPosition = 177
             addChild(label)
         }
-        briefingLetterhead.text = "HEADQUARTERS / ALLIED AIR OPERATIONS"
-        briefingLetterhead.fontSize = 14
+        briefingLetterhead.text = "U.S. ARMY AIR FORCES / OPERATIONS DIVISION"
+        briefingLetterhead.fontSize = 12
         briefingLetterhead.fontColor = SKColor(red:0.26,green:0.18,blue:0.11,alpha:1)
         briefingLetterhead.horizontalAlignmentMode = .center
         briefingLetterhead.zPosition = 179
@@ -2164,8 +2205,8 @@ private final class AirBattleScene: SKScene {
         }
         briefingLetterhead.position = CGPoint(x:rect.midX,y:rect.maxY-39)
         classifiedStamp.position = CGPoint(x:rect.maxX-95,y:rect.maxY-69)
-        briefingSeal.position = CGPoint(x:rect.minX+67,y:rect.minY+66)
-        briefingSignature.position = CGPoint(x:rect.minX+132,y:rect.minY+67)
+        briefingSeal.position = CGPoint(x:rect.minX+67,y:rect.minY+56)
+        briefingSignature.position = CGPoint(x:rect.minX+132,y:rect.minY+56)
         missionText.position = CGPoint(x:size.width/2,y:size.height-26)
     }
 
