@@ -1008,6 +1008,7 @@ private final class AirBattleScene: SKScene {
     private var missionTime: CGFloat = 0
     private let missionLimit: CGFloat = 150
     private var bomberLaunched = 0
+    private var missionIngressAngles:[CGFloat] = []
     private var bomberDestroyed = 0
     private var bomberEscaped = 0
     private var airfieldHealth = 3
@@ -2302,6 +2303,12 @@ private final class AirBattleScene: SKScene {
         lastAllyAttack = 0
         escortWaveIndex = 0
         clearMissionAllies()
+        // Shuffle approach quadrants each sortie; waves can come from any
+        // cardinal or diagonal sector without repeating a single east lane.
+        let sectors = [0, 1, 2, 3].shuffled()
+        missionIngressAngles = sectors.map { sector in
+            CGFloat(sector) * (.pi / 2) + CGFloat.random(in: -0.36...0.36)
+        }
         if campaignMission == .escort { spawnAlliedBombers() }
         regenerateCloudField()
         // First bomber flight is available to the radar immediately upon launch.
@@ -2317,12 +2324,18 @@ private final class AirBattleScene: SKScene {
         let launchIndex = bomberLaunched / 2
         let flightID = nextFlightID
         nextFlightID += 1
-        // ~34 seconds from launch to target, versus ~14 seconds previously.
-        // All three waves enter well beyond the visible battlefield edge.
-        let base = CGPoint(x:airfield.position.x + 3650,
-                           y:airfield.position.y + CGFloat(launchIndex-1)*230)
+        // Each wave flies its own preselected compass-sector approach.
+        // Share the vector with predicted radar arrivals for truthful warnings.
+        let angle = missionIngressAngles.indices.contains(launchIndex) ?
+            missionIngressAngles[launchIndex] : CGFloat.random(in:0...(2 * .pi))
+        let outward = CGVector(dx:cos(angle),dy:sin(angle))
+        let flank = CGVector(dx:-sin(angle),dy:cos(angle))
+        let base = CGPoint(x:airfield.position.x + outward.dx * 3650,
+                           y:airfield.position.y + outward.dy * 3650)
         for i in 0..<2 {
-            let point = CGPoint(x:base.x+CGFloat(i)*80,y:base.y+CGFloat(i)*135)
+            let separation = CGFloat(i == 0 ? -90 : 90)
+            let point = CGPoint(x:base.x + flank.dx * separation,
+                                y:base.y + flank.dy * separation)
             let sprite = SKNode()
             sprite.position = point
             sprite.zPosition = 15
@@ -2351,7 +2364,9 @@ private final class AirBattleScene: SKScene {
         // Escorts enter close to the inbound bombers but maneuver
         // independently and pursue the player, not the airfield.
         for i in 0..<(launchIndex == 0 ? 2 : 1) {
-            let point = CGPoint(x:base.x-180+CGFloat(i)*85,y:base.y+220)
+            let spacing = CGFloat(i == 0 ? -165 : 165)
+            let point = CGPoint(x:base.x + outward.dx * 165 + flank.dx * spacing,
+                                y:base.y + outward.dy * 165 + flank.dy * spacing)
             let sprite = SKNode()
             sprite.position = point
             sprite.zPosition = 15
@@ -2462,8 +2477,10 @@ private final class AirBattleScene: SKScene {
     private func spawnCampaignFighters(count: Int, elite: Bool) {
         let flight = nextFlightID
         nextFlightID += 1
-        let center = CGPoint(x:player.position.x + CGFloat.random(in:560...800),
-                             y:player.position.y + CGFloat.random(in:-320...320))
+        let angle = CGFloat.random(in:0...(2 * .pi))
+        let radius = CGFloat.random(in:560...850)
+        let center = CGPoint(x:player.position.x + cos(angle)*radius,
+                             y:player.position.y + sin(angle)*radius)
         for i in 0..<count {
             let point = CGPoint(x:center.x+CGFloat(i)*62,
                                 y:center.y+CGFloat(i-1)*85)
@@ -3476,8 +3493,10 @@ private final class AirBattleScene: SKScene {
                 // Predicted distant groups appear at the radar edge up to
                 // 25 seconds before the next physical spawn.
                 if let remaining=nextWaveETA,remaining <= 25 {
-                    addContact(CGPoint(x:airfield.position.x+5500,
-                                      y:airfield.position.y+CGFloat(nextIndex-1)*230),
+                    let angle = missionIngressAngles.indices.contains(nextIndex) ?
+                        missionIngressAngles[nextIndex] : 0
+                    addContact(CGPoint(x:airfield.position.x + cos(angle)*3650,
+                                       y:airfield.position.y + sin(angle)*3650),
                                bomber:true,flightID:1000+nextIndex,
                                priority:true,pending:true)
                 }
