@@ -3859,6 +3859,7 @@ private final class LeftFlightHUDNode: SKNode {
     private let vsPointer=SKShapeNode(rectOf:CGSize(width:16,height:5))
     private let airframeShape=SKShapeNode()
     private var hasPlateArtwork = false
+    private var damageTexture: SKSpriteNode?
     private let fighter:Fighter
     private let healthLabel:SKLabelNode
     private let conditionPips:[SKShapeNode]
@@ -4068,15 +4069,41 @@ private final class LeftFlightHUDNode: SKNode {
                   point(-75,52),point(-11,43),point(-7,20)]
         }
         trace(plan,into:outline)
-        // Aircraft-only shaded recognition plan. No rectangular parchment
-        // crop: the entire shape responds to the existing damage palette.
-        // Shape and reference linework retain fighter-specific proportions.
-        hasPlateArtwork = false
+        // Retain rivets, panel shading and military markings from the
+        // overhead hangar plate, but clip the rectangular paper to the
+        // selected aircraft's actual top-down recognition outline.
+        let sourceName:String
+        switch fighter {
+        case .mustang: sourceName="HangarP51"
+        case .thunderbolt: sourceName="HangarP47"
+        case .lightning: sourceName="HangarP38"
+        case .warhawk: sourceName="HangarP40"
+        }
+        if let url=Bundle.main.url(forResource:sourceName,withExtension:"png"),
+           let image=NSImage(contentsOf:url),
+           let original=image.cgImage(forProposedRect:nil,context:nil,hints:nil),
+           original.width >= 768 && original.height >= 512,
+           let cropped=original.cropping(to:CGRect(x:21,y:315,width:216,height:160)) {
+            let crop=SKCropNode()
+            let mask=SKShapeNode(path:outline)
+            mask.fillColor = .white
+            mask.strokeColor = .clear
+            crop.maskNode=mask
+            let plane=SKSpriteNode(texture:SKTexture(cgImage:cropped))
+            plane.size=CGSize(width:182,height:110)
+            plane.position=CGPoint(x:110,y:-548)
+            plane.colorBlendFactor=0.82
+            crop.addChild(plane)
+            crop.zPosition=0.5
+            addChild(crop)
+            damageTexture=plane
+            hasPlateArtwork=true
+        }
         airframeShape.path=outline
         airframeShape.fillColor=AcesHUDVisual.ice.withAlphaComponent(0.28)
         airframeShape.strokeColor=AcesHUDVisual.ice
         airframeShape.lineWidth=1.7
-        airframeShape.alpha = 1
+        airframeShape.alpha = hasPlateArtwork ? 0.20 : 1
         addChild(airframeShape)
         let detailing=SKShapeNode()
         let details=CGMutablePath()
@@ -4105,7 +4132,7 @@ private final class LeftFlightHUDNode: SKNode {
         detailing.strokeColor=AcesHUDVisual.ice.withAlphaComponent(0.72)
         detailing.lineWidth=0.9
         detailing.fillColor = .clear
-        detailing.alpha = 1
+        detailing.alpha = hasPlateArtwork ? 0.50 : 1
         addChild(detailing)
         // Thin metallic wing and tail ribs form an aircraft-only technical
         // rendering, retaining the shape's live health color.
@@ -4168,6 +4195,7 @@ private final class LeftFlightHUDNode: SKNode {
                       ratio < 0.65 ? AcesHUDVisual.amber : AcesHUDVisual.ice
         airframeShape.fillColor=condition.withAlphaComponent(0.33)
         airframeShape.strokeColor=condition
+        damageTexture?.color=condition
         healthLabel.text="\(max(0,v.health))/\(v.maxHealth)"
         healthLabel.fontColor=condition
         for (i,pip) in conditionPips.enumerated() {
