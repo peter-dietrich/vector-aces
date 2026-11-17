@@ -128,6 +128,8 @@ private final class AirBattleScene: SKScene {
     private var airspeed: CGFloat = 210
     private var health: Int
     private var score = 0
+    // Durable record for the Fun City cross-game high-score board.
+    private var highScore = UserDefaults.standard.integer(forKey: "VectorAces.HighScore.v1")
     private var kills = 0
     private var wave = 1
     private var pausedGame = false
@@ -876,6 +878,10 @@ private final class AirBattleScene: SKScene {
                             comboDeadline = gameTime + 3.6
                             let award = 100 * wave * min(hitCombo, 4)
                             score += award
+                            if score > highScore {
+                                highScore = score
+                                UserDefaults.standard.set(highScore, forKey: "VectorAces.HighScore.v1")
+                            }
                             if hitCombo > 1 { flash("COMBO ×\(hitCombo)   +\(award)") } else { flash("SPLASH ONE   +\(award)") }
                         }
                         break
