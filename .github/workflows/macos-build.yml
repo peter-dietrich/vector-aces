@@ -1,0 +1,28 @@
+name: Vector Aces macOS build
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Build Vector Aces
+        run: |
+          set -o pipefail
+          xcodebuild -project VectorAces.xcodeproj \
+            -scheme VectorAces \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee xcodebuild.log
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vector-aces-xcodebuild-log
+          path: xcodebuild.log
