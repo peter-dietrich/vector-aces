@@ -68,6 +68,7 @@ enum Fighter: String, CaseIterable, Identifiable {
             .frame(minWidth: 900, minHeight: 620)
         }
         .defaultSize(width: 1240, height: 760)
+        .commands { GameHelpCommands() }
     }
 }
 
