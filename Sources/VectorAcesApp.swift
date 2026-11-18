@@ -20,6 +20,7 @@ enum Fighter: String, CaseIterable, Identifiable {
 }
 
 @main struct VectorAcesApp: App {
+    @NSApplicationDelegateAdaptor(ArcadeIconAppDelegate.self) private var iconDelegate
     @State private var fighter: Fighter = .mustang
     @State private var started = false
     var body: some Scene {
